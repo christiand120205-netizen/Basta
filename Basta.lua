@@ -72,7 +72,7 @@ MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
--- Title is a sibling of TitleBar (behind it), NOT a child
+-- Title (sibling of TitleBar, behind it)
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -90, 0, 40)
 Title.Position = UDim2.new(0, 15, 0, 0)
@@ -411,7 +411,6 @@ do
 
     track(TitleBar.InputBegan:Connect(beginDrag))
 
-    -- Path A: global UIS (works when nothing else captures)
     track(UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.Touch
         or input.UserInputType == Enum.UserInputType.MouseMovement) then
@@ -419,7 +418,6 @@ do
         end
     end))
 
-    -- Path B: GuiObject direct (works when UIS is swallowed)
     track(TitleBar.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.Touch
         or input.UserInputType == Enum.UserInputType.MouseMovement) then
@@ -427,7 +425,6 @@ do
         end
     end))
 
-    -- Reset on release from either source
     track(UserInputService.InputEnded:Connect(endDrag))
     track(TitleBar.InputEnded:Connect(endDrag))
 end
@@ -508,7 +505,6 @@ track(RunService.RenderStepped:Connect(function()
                     if onScreen then
                         local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                         local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                        -- Current target gets a wider re-acquire window
                         local limit = (p.Name == currentTargetName) and (maxDist + 30) or maxDist
                         if dist <= limit and passesWallCheck then
                             if p.Name == currentTargetName then
@@ -523,7 +519,6 @@ track(RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Sticky decision
         if ProtectionSettings.StickyTarget and currentPlayer then
             target = currentPlayer
             if bestPlayer and bestPlayer ~= currentPlayer and bestDist < currentDist - ProtectionSettings.SwitchMargin then
@@ -535,166 +530,39 @@ track(RunService.RenderStepped:Connect(function()
             currentTargetName = bestPlayer and bestPlayer.Name or nil
         end
 
-        -- Grace period: keep last target briefly if selection dropped out
         if target then
             lastTargetTime = tick()
-        elseif currentTargetName and tick() - lastTargetTime  CONTROLS
-----------------------------------------------------------------
-
-CreateToggle("Enable Protection", false, function(v) ProtectionSettings.Enabled = v end)
-CreateSlider("FOV Radius", 1, 600, ProtectionSettings.FOV, function(v) ProtectionSettings.FOV = v end)
-CreateSlider("Smoothness", 0, 1, ProtectionSettings.Smoothness, function(v) ProtectionSettings.Smoothness = v end)
-CreateToggle("Hard Aim", false, function(v) ProtectionSettings.HardAim = v end)
-CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v end)
-CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end)
-CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end)
-
--- FOV Circle permanently pinned to the dead center
-local FOVCircle = Instance.new("Frame")
-FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-FOVCircle.BackgroundTransparency = 1
-FOVCircle.Parent = ScreenGui
-local Stroke = Instance.new("UIStroke", FOVCircle)
-Stroke.Color = Color3.fromRGB(0, 170, 255)
-Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
-
-----------------------------------------------------------------
--- DRAGGABLE MENU (title bar only, touch + mouse)
-----------------------------------------------------------------
-
-do
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-
-    local function updateDrag(input)
-        if not dragging or not dragStart then return end
-        local delta = input.Position - dragStart
-        local newX = startPos.X.Offset + delta.X
-        local newY = startPos.Y.Offset + delta.Y
-
-        local vp = Camera.ViewportSize
-        local w, h = MainFrame.AbsoluteSize.X, MainFrame.AbsoluteSize.Y
-        newX = math.clamp(newX, -(vp.X / 2) + w / 2 + 8, (vp.X / 2) - w / 2 - 8)
-        newY = math.clamp(newY, -(vp.Y / 2) + h / 2 + 8, (vp.Y / 2) - h / 2 - 8)
-
-        MainFrame.Position = UDim2.new(0.5, newX, 0.5, newY)
-    end
-
-    track(Title.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-        end
-    end))
-
-    track(UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            updateDrag(input)
-        end
-    end))
-
-    track(UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-            dragStart = nil
-            startPos = nil
-        end
-    end))
-end
-
-----------------------------------------------------------------
--- UNLOAD (Option B - fully clean)
-----------------------------------------------------------------
-
-local function UnloadScript()
-    -- Stop all logic immediately
-    ProtectionSettings.Enabled = false
-    ProtectionSettings.ShowHealthBars = false
-
-    -- Disconnect every tracked connection
-    for _, conn in ipairs(Connections) do
-        pcall(function() conn:Disconnect() end)
-    end
-    Connections = {}
-
-    -- Destroy health bars
-    for _, bar in pairs(HealthBarStorage) do
-        pcall(function() bar:Destroy() end)
-    end
-    HealthBarStorage = {}
-
-    -- Destroy the whole UI (ScreenGui holds FOVCircle, health bars, buttons)
-    pcall(function() ScreenGui:Destroy() end)
-end
-
-CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript)
-
-----------------------------------------------------------------
--- MENU OPEN / CLOSE
-----------------------------------------------------------------
-
-track(OpenButton.Activated:Connect(function()
-    GuiOpen = not GuiOpen
-    MainFrame.Visible = GuiOpen
-    OpenButton.Text = GuiOpen and "Close" or "Menu"
-end))
-
-track(CloseButton.Activated:Connect(function()
-    GuiOpen = false
-    MainFrame.Visible = false
-    OpenButton.Text = "Menu"
-end))
-
-----------------------------------------------------------------
--- MAIN LOOP
-----------------------------------------------------------------
-
-track(RunService.RenderStepped:Connect(function()
-    local vpSize = Camera.ViewportSize
-    local screenCenter = Vector2.new(vpSize.X / 2, vpSize.Y / 2)
-
-    -- 1. FOV Circle (Fixed strictly in the center)
-    if ProtectionSettings.Enabled and ProtectionSettings.ShowFOV then
-        FOVCircle.Visible = true
-        FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-        FOVCircle.Size = UDim2.new(0, ProtectionSettings.FOV * 2, 0, ProtectionSettings.FOV * 2)
-    else
-        FOVCircle.Visible = false
-    end
-
-    -- 2. Target Selection (Strictly closest to screen center)
-    local target = nil
-    if ProtectionSettings.Enabled then
-        local maxDist = ProtectionSettings.FOV
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+        elseif currentTargetName and tick() - lastTargetTime < 0.25 then
+            local p = Players:FindFirstChild(currentTargetName)
+            if p and p.Character then
                 local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart)
+                    or p.Character:FindFirstChild("HumanoidRootPart")
                 if part then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                    if onScreen then
-                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-                        local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                        if dist <= maxDist and passesWallCheck then
-                            maxDist = dist
-                            target = p
-                        end
-                    end
+                    target = p
+                else
+                    currentTargetName = nil
                 end
+            else
+                currentTargetName = nil
             end
+        else
+            currentTargetName = nil
         end
 
         if target and target.Character then
-            local aimPart = target.Character[ProtectionSettings.TargetPart]
-            local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
-            if ProtectionSettings.HardAim then
-                Camera.CFrame = targetCF
+            local aimPart = target.Character:FindFirstChild(ProtectionSettings.TargetPart)
+                or target.Character:FindFirstChild("HumanoidRootPart")
+            if aimPart then
+                local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
+                if ProtectionSettings.HardAim then
+                    Camera.CFrame = targetCF
+                else
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
+                end
+                InfoLabel.Text = "Target: " .. target.Name
             else
-                Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
+                InfoLabel.Text = "Target: None"
             end
-            InfoLabel.Text = "Target: " .. target.Name
         else
             InfoLabel.Text = "Target: None"
         end
@@ -703,7 +571,11 @@ track(RunService.RenderStepped:Connect(function()
     -- 3. Health Bars
     for _, player in pairs(Players:GetPlayers()) do
         pcall(function()
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
+            if player ~= LocalPlayer
+            and not isTeammate(player)
+            and player.Character
+            and player.Character:FindFirstChild("Head")
+            and player.Character:FindFirstChild("Humanoid") then
                 local bar = HealthBarStorage[player.Name]
                 if not bar then
                     bar = CreateHealthBar(player)
