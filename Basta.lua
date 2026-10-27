@@ -72,7 +72,6 @@ MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
--- Title (sibling of TitleBar, behind it)
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, -90, 0, 40)
 Title.Position = UDim2.new(0, 15, 0, 0)
@@ -86,7 +85,6 @@ Title.Active = false
 Title.ZIndex = 3
 Title.Parent = MainFrame
 
--- Transparent full-width button ON TOP of Title - grabs all touches
 local TitleBar = Instance.new("TextButton")
 TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 40)
@@ -360,7 +358,6 @@ CreateToggle("Sticky Target", true, function(v) ProtectionSettings.StickyTarget 
 CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end)
 CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end)
 
--- FOV Circle permanently pinned to the dead center
 local FOVCircle = Instance.new("Frame")
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -476,7 +473,6 @@ track(RunService.RenderStepped:Connect(function()
     local vpSize = Camera.ViewportSize
     local screenCenter = Vector2.new(vpSize.X / 2, vpSize.Y / 2)
 
-    -- 1. FOV Circle
     if ProtectionSettings.Enabled and ProtectionSettings.ShowFOV then
         FOVCircle.Visible = true
         FOVCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -485,7 +481,6 @@ track(RunService.RenderStepped:Connect(function()
         FOVCircle.Visible = false
     end
 
-    -- 2. Target Selection with sticky + grace + team filter
     local target = nil
     if ProtectionSettings.Enabled then
         local maxDist = ProtectionSettings.FOV
@@ -568,7 +563,6 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 3. Health Bars
     for _, player in pairs(Players:GetPlayers()) do
         pcall(function()
             if player ~= LocalPlayer
