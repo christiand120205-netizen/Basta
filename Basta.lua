@@ -394,11 +394,11 @@ CreateSlider("Smoothness", 0, 1, ProtectionSettings.Smoothness, function(v) Prot
 CreateToggle("Hard Aim", false, function(v) ProtectionSettings.HardAim = v end, LeftColumn)
 CreateToggle("Sticky Target", true, function(v) ProtectionSettings.StickyTarget = v end, LeftColumn)
 
+CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v end, RightColumn)
+CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end, RightColumn)
 CreateCycler("Target Type", {"All", "Players Only", "Bots Only"}, 1, function(v)
     ProtectionSettings.TargetType = v
 end, RightColumn)
-CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v end, RightColumn)
-CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end, RightColumn)
 CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end, RightColumn)
 CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end, RightColumn)
 
@@ -598,7 +598,7 @@ track(RunService.RenderStepped:Connect(function()
         local bestTarget, bestDist = nil, math.huge
         local currentTarget, currentDist = nil, math.huge
         
-        -- Create a master list of both Players and Models (NPCs/Bots)
+        -- Master list of targets (Players + Bots)
         local possibleTargets = {}
         
         -- 1. Add Players
@@ -606,10 +606,9 @@ track(RunService.RenderStepped:Connect(function()
             table.insert(possibleTargets, p)
         end
         
-        -- 2. Add Bots (Models in Workspace with Humanoids)
+        -- 2. Add Bots (Models with Humanoids that aren't Players)
         for _, obj in pairs(Workspace:GetChildren()) do
             if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
-                -- Make sure it's not a player character (which we already added)
                 if not Players:GetPlayerFromCharacter(obj) then
                     table.insert(possibleTargets, obj)
                 end
@@ -621,14 +620,10 @@ track(RunService.RenderStepped:Connect(function()
             local char = isPlayer and t.Character or t
             local isDead = false
             
-            -- Determine if it's a valid target based on the Target Type setting
-            if ProtectionSettings.TargetType == "Players Only" and not isPlayer then
-                isDead = true
-            elseif ProtectionSettings.TargetType == "Bots Only" and isPlayer then
-                isDead = true
-            end
+            -- Target Type filtering
+            if ProtectionSettings.TargetType == "Players Only" and not isPlayer then isDead = true end
+            if ProtectionSettings.TargetType == "Bots Only" and isPlayer then isDead = true end
 
-            -- Skip teammates if it's a player
             if isPlayer and isTeammate(t) then isDead = true end
             
             if not isDead and char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
@@ -641,19 +636,15 @@ track(RunService.RenderStepped:Connect(function()
                         local limit = (t.Name == currentTargetName) and (maxDist + 30) or maxDist
                         
                         if dist <= limit and passesWallCheck then
-                            if t.Name == currentTargetName then 
-                                currentTarget, currentDist = t, dist 
-                            end
-                            if dist < bestDist then 
-                                bestTarget, bestDist = t, dist 
-                            end
+                            if t.Name == currentTargetName then currentTarget, currentDist = t, dist end
+                            if dist < bestDist then bestTarget, bestDist = t, dist end
                         end
                     end
                 end
             end
         end
 
-        -- Sticky targeting logic
+        -- Sticky logic
         if ProtectionSettings.StickyTarget and currentTarget then
             target = currentTarget
             if bestTarget and bestTarget ~= currentTarget and bestDist < currentDist - ProtectionSettings.SwitchMargin then
@@ -665,20 +656,16 @@ track(RunService.RenderStepped:Connect(function()
             currentTargetName = bestTarget and bestTarget.Name or nil
         end
 
-        -- Grace period handling
+        -- Grace period
         if target then
             lastTargetTime = tick()
         elseif currentTargetName and tick() - lastTargetTime < 0.25 then
-            if bestTarget then
-                target = bestTarget
-            else
-                currentTargetName = nil
-            end
+            if bestTarget then target = bestTarget else currentTargetName = nil end
         else
             currentTargetName = nil
         end
 
-        -- Execution
+        -- Aim execution
         if target then
             local targetChar = target:IsA("Player") and target.Character or target
             if targetChar then
@@ -700,7 +687,7 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Health Bars (also updated to handle Bots)
+    -- Health Bars
     for _, obj in pairs(Workspace:GetChildren()) do
         pcall(function()
             local isPlayer = obj:IsA("Player")
