@@ -1,4 +1,4 @@
--- Secret Service Protection (Finalized for Custom Frameworks)
+-- Secret Service Protection (Finalized + Custom Framework Fixes)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -13,7 +13,7 @@ local Camera = workspace.CurrentCamera
 local ProtectionSettings = {
     Enabled = false,
     FOV = 120,
-    Smoothness = 0.2,
+    Smoothness = 0.15,
     HardAim = false,
     TargetPart = "Head",
     WallCheck = true,
@@ -342,7 +342,7 @@ local function isVisible(part)
     return result == nil
 end
 
--- Game-specific Team Logic based on Roblox Studio AI findings
+-- Game-Specific Team Logic (1 = Enemy, 2 = Ally, -1 = Neutral)
 local function isTeammate(p)
     if p == LocalPlayer then return false end
     
@@ -350,7 +350,7 @@ local function isTeammate(p)
     local theirTeam = p:GetAttribute("Team")
     
     if myTeam == nil or theirTeam == nil then return false end
-    if myTeam == -1 or theirTeam == -1 then return false end -- -1 is neutral/no team
+    if myTeam == -1 or theirTeam == -1 then return false end 
     
     return myTeam == theirTeam
 end
@@ -506,7 +506,7 @@ do
 end
 
 ----------------------------------------------------------------
--- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE + POSITION MEMORY)
+-- MINIMIZE / EXPAND
 ----------------------------------------------------------------
 
 function toggleMinimize()
@@ -587,10 +587,10 @@ end
 CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript, RightColumn)
 
 ----------------------------------------------------------------
--- MAIN LOOP (BindToRenderStep for Custom Camera Compatibility)
+-- MAIN LOOP
 ----------------------------------------------------------------
 
-track(RunService:BindToRenderStep("SecretServiceAim", 202, function(dt)
+track(RunService.RenderStepped:Connect(function()
     local vpSize = Camera.ViewportSize
     local screenCenter = Vector2.new(vpSize.X / 2, vpSize.Y / 2)
 
@@ -668,11 +668,10 @@ track(RunService:BindToRenderStep("SecretServiceAim", 202, function(dt)
             lastValidTarget = nil
         end
 
-        -- 5. Aim execution (Frame-rate independent smoothness)
+        -- 5. Aim execution
         if currentTarget then
             local targetChar = currentTarget.Character
             if targetChar then
-                -- Aim at UpperTorso for smoother first-person tracking
                 local aimPart = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild(ProtectionSettings.TargetPart)
                 if aimPart then
                     local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
@@ -680,8 +679,7 @@ track(RunService:BindToRenderStep("SecretServiceAim", 202, function(dt)
                     if ProtectionSettings.HardAim then
                         Camera.CFrame = targetCF
                     else
-                        local alpha = 1 - math.exp(-ProtectionSettings.Smoothness * 60 * dt)
-                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
+                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
                     end
                     InfoLabel.Text = "Target: " .. currentTarget.Name
                 else
@@ -736,7 +734,6 @@ track(RunService:BindToRenderStep("SecretServiceAim", 202, function(dt)
                         HighlightStorage[player] = highlight
                     end
                     
-                    -- Custom Attribute Team Logic (1 = Enemy, 2 = Ally, -1 = Neutral)
                     local theirTeam = player:GetAttribute("Team")
                     
                     if isTeammate(player) then
