@@ -1,4 +1,4 @@
--- Secret Service Protection (IY TeamColor Chams Adopted)
+-- Secret Service Protection (Aimbot & ESP Fixed)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -36,6 +36,7 @@ local expandedPosition = UDim2.new(0.5, 0, 0.5, 0)
 local minimizedPosition = UDim2.new(0.5, 0, 0.5, 0)
 
 local currentTarget = nil
+local lastValidTarget = nil
 local lastTargetTime = 0
 
 local Connections = {}
@@ -341,15 +342,25 @@ end
 
 local function isTeammate(p)
     if p == LocalPlayer then return false end
-    if LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team then return true end
-    if LocalPlayer.TeamColor and p.TeamColor
-    and LocalPlayer.TeamColor ~= Enum.TeamColor.Neutral
-    and p.TeamColor ~= Enum.TeamColor.Neutral
-    and LocalPlayer.TeamColor == p.TeamColor then return true end
 
+    -- 1. Roblox Team object
+    if LocalPlayer.Team and p.Team then
+        return LocalPlayer.Team == p.Team
+    end
+
+    -- 2. TeamColor (Skip if Neutral/FFA)
+    local neutralColor = BrickColor.new("Medium stone grey")
+    if LocalPlayer.TeamColor and p.TeamColor then
+        if LocalPlayer.TeamColor ~= neutralColor and p.TeamColor ~= neutralColor then
+            if LocalPlayer.TeamColor == p.TeamColor then return true end
+        end
+    end
+
+    -- 3. Custom Attributes
     local myAttr, theirAttr = LocalPlayer:GetAttribute("Team"), p:GetAttribute("Team")
     if myAttr ~= nil and theirAttr ~= nil and myAttr == theirAttr then return true end
 
+    -- 4. Custom StringValue
     local myVal, theirVal = LocalPlayer:FindFirstChild("Team"), p:FindFirstChild("Team")
     if myVal and theirVal and myVal:IsA("ValueBase") and theirVal:IsA("ValueBase")
     and myVal.Value == theirVal.Value then return true end
@@ -630,7 +641,6 @@ track(RunService.RenderStepped:Connect(function()
 
         -- 2. Find the best new target
         for _, p in pairs(Players:GetPlayers()) do
-            -- Aimbot respects the IgnoreTeam setting
             if p ~= LocalPlayer and (not ProtectionSettings.IgnoreTeam or not isTeammate(p)) then
                 local char = p.Character
                 if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
@@ -652,22 +662,28 @@ track(RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- 3. Sticky Logic
+        -- 3. Sticky Logic (Fixed)
+        local foundTarget = false
         if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
-            if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
-                currentTarget = bestTarget
-            end
+            foundTarget = true
         else
-            currentTarget = bestTarget
+            if bestTarget then
+                currentTarget = bestTarget
+                foundTarget = true
+            else
+                currentTarget = nil
+            end
         end
 
-        -- 4. Grace period
-        if currentTarget then
+        -- 4. Grace Period (Fixed)
+        if foundTarget then
             lastTargetTime = tick()
-        elseif currentTarget and tick() - lastTargetTime < 0.25 then
-            -- keep target briefly
+            lastValidTarget = currentTarget
+        elseif lastValidTarget and tick() - lastTargetTime < 0.25 then
+            currentTarget = lastValidTarget
         else
             currentTarget = nil
+            lastValidTarget = nil
         end
 
         -- 5. Aim execution
@@ -735,15 +751,15 @@ track(RunService.RenderStepped:Connect(function()
                         HighlightStorage[player] = highlight
                     end
                     
-                    -- ADOPTED FROM INFINITE YIELD:
-                    -- It uses the player's exact TeamColor from the game.
-                    -- If the game is FFA (Neutral), it falls back to Red/Green.
                     local currentColor = player.TeamColor.Color
-                    if currentColor == Color3.fromRGB(255, 255, 255) or currentColor == Color3.fromRGB(0, 0, 0) or currentColor == Color3.fromRGB(128, 128, 128) then
+                    local neutralColor = BrickColor.new("Medium stone grey").Color
+                    
+                    -- If the game is FFA (Neutral), fallback to Red/Green
+                    if currentColor == neutralColor or not player.Team then
                         if isTeammate(player) then
-                            currentColor = Color3.fromRGB(0, 255, 0) -- Green fallback
+                            currentColor = Color3.fromRGB(0, 255, 0) -- Green
                         else
-                            currentColor = Color3.fromRGB(255, 0, 0) -- Red fallback
+                            currentColor = Color3.fromRGB(255, 0, 0) -- Red
                         end
                     end
                     
