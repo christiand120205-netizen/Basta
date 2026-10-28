@@ -1,9 +1,10 @@
--- Secret Service Protection (LANDSCAPE / MINIMIZE TO CIRCLE)
+-- Secret Service Protection (LANDSCAPE / MORPH TO CIRCLE)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -31,7 +32,6 @@ local CircleSize = 52
 
 local currentTargetName = nil
 local lastTargetTime = 0
-local savedFramePos = UDim2.new(0.5, 0, 0.5, 0)
 
 local Connections = {}
 local function track(conn)
@@ -55,9 +55,11 @@ MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.ClipsDescendants = true -- Hides controls when turning into a circle
 MainFrame.Visible = true
 MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+local MainCorner = Instance.new("UICorner", MainFrame)
+MainCorner.CornerRadius = UDim.new(0, 10)
 
 local UIScale = Instance.new("UIScale")
 UIScale.Scale = 1
@@ -151,28 +153,8 @@ local RightList = Instance.new("UIListLayout")
 RightList.Padding = UDim.new(0, 4)
 RightList.Parent = RightColumn
 
--- The circle that the menu shrinks into
-local MinimizedCircle = Instance.new("TextButton")
-MinimizedCircle.Name = "MinimizedCircle"
-MinimizedCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-MinimizedCircle.Size = UDim2.new(0, CircleSize, 0, CircleSize)
-MinimizedCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-MinimizedCircle.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-MinimizedCircle.Text = "SS"
-MinimizedCircle.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinimizedCircle.Font = Enum.Font.GothamBold
-MinimizedCircle.TextSize = 16
-MinimizedCircle.Active = true
-MinimizedCircle.Visible = false
-MinimizedCircle.ZIndex = 20
-MinimizedCircle.Parent = ScreenGui
-Instance.new("UICorner", MinimizedCircle).CornerRadius = UDim.new(1, 0)
-local CircleStroke = Instance.new("UIStroke", MinimizedCircle)
-CircleStroke.Color = Color3.fromRGB(255, 255, 255)
-CircleStroke.Thickness = 2
-
 ----------------------------------------------------------------
--- MOBILE-COMPATIBLE UI CONTROLS (compact, landscape)
+-- MOBILE-COMPATIBLE UI CONTROLS
 ----------------------------------------------------------------
 
 local function CreateToggle(name, default, callback, parent)
@@ -443,41 +425,78 @@ Stroke.Color = Color3.fromRGB(0, 170, 255)
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 ----------------------------------------------------------------
--- MINIMIZE TO CIRCLE / EXPAND
+-- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
 ----------------------------------------------------------------
 
-local function collapseToCircle()
-    savedFramePos = MainFrame.Position
-    MainFrame.Visible = false
-    MainFrame.Size = UDim2.new(0, 0, 0, 0)
-    MinimizedCircle.Position = savedFramePos
-    MinimizedCircle.Visible = true
-    Minimized = true
-end
+local function toggleMinimize()
+    Minimized = not Minimized
 
-local function expandFromCircle()
-    savedFramePos = MinimizedCircle.Position
-    MinimizedCircle.Visible = false
-    MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
-    MainFrame.Position = savedFramePos
-    MainFrame.Visible = true
-    Minimized = false
-end
-
-track(MinimizeCircleButton.Activated:Connect(function()
-    if not Minimized then
-        collapseToCircle()
-    end
-end))
-
-track(MinimizedCircle.Activated:Connect(function()
     if Minimized then
-        expandFromCircle()
+        -- Hide controls instantly so they don't squish
+        Columns.Visible = false
+        Title.Visible = false
+        MinimizeCircleButton.Visible = false
+        TitleBar.Visible = false
+
+        -- Tween the frame into a circle
+        local tween = TweenService:Create(
+            MainFrame,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            { 
+                Size = UDim2.new(0, CircleSize, 0, CircleSize),
+                BackgroundColor3 = Color3.fromRGB(0, 170, 255) -- Turn blue like the old circle
+            }
+        )
+        tween:Play()
+
+        -- Make it fully round
+        local tweenCorner = TweenService:Create(
+            MainCorner,
+            TweenInfo.new(0.3),
+            { CornerRadius = UDim.new(1, 0) }
+        )
+        tweenCorner:Play()
+    else
+        -- Tween back to rectangle
+        local tween = TweenService:Create(
+            MainFrame,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            { 
+                Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight),
+                BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+            }
+        )
+        tween:Play()
+
+        local tweenCorner = TweenService:Create(
+            MainCorner,
+            TweenInfo.new(0.3),
+            { CornerRadius = UDim.new(0, 10) }
+        )
+        tweenCorner:Play()
+
+        -- Show controls when it's done expanding
+        task.delay(0.3, function()
+            if not Minimized then
+                Columns.Visible = true
+                Title.Visible = true
+                MinimizeCircleButton.Visible = true
+                TitleBar.Visible = true
+            end
+        end)
+    end
+end
+
+track(MinimizeCircleButton.Activated:Connect(toggleMinimize))
+-- Clicking the circle while minimized expands it
+track(MainFrame.InputBegan:Connect(function(input)
+    if Minimized and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
+        toggleMinimize()
     end
 end))
 
 ----------------------------------------------------------------
--- DRAGGABLE MENU + DRAGGABLE CIRCLE (Android-safe)
+-- DRAGGABLE MENU (Android-safe)
 ----------------------------------------------------------------
 
 do
@@ -485,51 +504,36 @@ do
     local dragTouchId = nil
     local dragStart = nil
     local startPos = nil
-    local dragTarget = nil
 
     local function updateDrag(pos)
-        if not dragging or not dragStart or not dragTarget then return end
+        if not dragging or not dragStart then return end
         local delta = pos - dragStart
         local vp = Camera.ViewportSize
-        local w, h = dragTarget.AbsoluteSize.X, dragTarget.AbsoluteSize.Y
+        local w, h = MainFrame.AbsoluteSize.X, MainFrame.AbsoluteSize.Y
+        
+        -- Use the expanded height for clamping so the circle doesn't snap weirdly if dragged
+        local clampW = FrameWidth * UIScale.Scale
+        local clampH = ExpandedHeight * UIScale.Scale
+
         local newX = startPos.X.Offset + delta.X
         local newY = startPos.Y.Offset + delta.Y
-        newX = math.clamp(newX, -(vp.X / 2) + w / 2 + 8, (vp.X / 2) - w / 2 - 8)
-        newY = math.clamp(newY, -(vp.Y / 2) + h / 2 + 8, (vp.Y / 2) - h / 2 - 8)
-        dragTarget.Position = UDim2.new(0.5, newX, 0.5, newY)
-    end
-
-    local function beginDrag(input, target)
-        dragging = true
-        dragTarget = target
-        dragTouchId = (input.UserInputType == Enum.UserInputType.Touch) and input or nil
-        dragStart = Vector2.new(input.Position.X, input.Position.Y)
-        startPos = target.Position
-    end
-
-    local function endDrag(input)
-        if dragTouchId and input ~= dragTouchId then return end
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-            dragTouchId = nil
-            dragStart = nil
-            startPos = nil
-            dragTarget = nil
-        end
+        
+        newX = math.clamp(newX, -(vp.X / 2) + clampW / 2 + 8, (vp.X / 2) - clampW / 2 - 8)
+        newY = math.clamp(newY, -(vp.Y / 2) + clampH / 2 + 8, (vp.Y / 2) - clampH / 2 - 8)
+        MainFrame.Position = UDim2.new(0.5, newX, 0.5, newY)
     end
 
     track(TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            beginDrag(input, MainFrame)
-        end
-    end))
-
-    track(MinimizedCircle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            beginDrag(input, MinimizedCircle)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragTouchId = input
+            dragStart = Vector2.new(input.Position.X, input.Position.Y)
+            startPos = MainFrame.Position
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragTouchId = nil
+            dragStart = Vector2.new(input.Position.X, input.Position.Y)
+            startPos = MainFrame.Position
         end
     end))
 
@@ -539,7 +543,14 @@ do
         updateDrag(Vector2.new(input.Position.X, input.Position.Y))
     end))
 
-    track(UserInputService.TouchEnded:Connect(endDrag))
+    track(UserInputService.TouchEnded:Connect(function(input)
+        if dragTouchId and input == dragTouchId then
+            dragging = false
+            dragTouchId = nil
+            dragStart = nil
+            startPos = nil
+        end
+    end))
 
     track(UserInputService.InputChanged:Connect(function(input)
         if dragging and dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -547,11 +558,17 @@ do
         end
     end))
 
-    track(UserInputService.InputEnded:Connect(endDrag))
+    track(UserInputService.InputEnded:Connect(function(input)
+        if dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            dragStart = nil
+            startPos = nil
+        end
+    end))
 end
 
 ----------------------------------------------------------------
--- UNLOAD (fully clean)
+-- UNLOAD
 ----------------------------------------------------------------
 
 local function UnloadScript()
