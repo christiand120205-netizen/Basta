@@ -1,4 +1,4 @@
--- Secret Service Protection (Stable Revert + Chams ESP)
+-- Secret Service Protection (Stable + Chams + Separate UI Positions)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -19,7 +19,7 @@ local ProtectionSettings = {
     WallCheck = true,
     ShowFOV = true,
     ShowHealthBars = false,
-    ShowESP = false, -- NEW: Highlight Chams
+    ShowESP = false,
     StickyTarget = true,
     SwitchMargin = 30,
     IgnoreTeam = true,
@@ -31,6 +31,11 @@ local Minimized = false
 local ExpandedHeight = 260
 local FrameWidth = 480
 local CircleSize = 52
+
+-- POSITION MEMORY --
+local expandedPosition = UDim2.new(0.5, 0, 0.5, 0)
+local minimizedPosition = UDim2.new(0.5, 0, 0.5, 0)
+----------------------
 
 local currentTarget = nil
 local lastTargetTime = 0
@@ -55,7 +60,7 @@ local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
-MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+MainFrame.Position = expandedPosition
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.ClipsDescendants = true
 MainFrame.Visible = true
@@ -507,21 +512,26 @@ do
 end
 
 ----------------------------------------------------------------
--- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
+-- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE + POSITION MEMORY)
 ----------------------------------------------------------------
 
 function toggleMinimize()
     Minimized = not Minimized
 
     if Minimized then
+        -- Saving the current expanded location before minimizing
+        expandedPosition = MainFrame.Position 
+        
         Columns.Visible = false
         Title.Visible = false
         MinimizeCircleButton.Visible = false
         
         TitleBar.Size = UDim2.new(1, 0, 1, 0)
 
+        -- Tween both Size AND Position
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
             Size = UDim2.new(0, CircleSize, 0, CircleSize),
+            Position = minimizedPosition, 
             BackgroundColor3 = Color3.fromRGB(0, 170, 255)
         }):Play()
 
@@ -529,10 +539,15 @@ function toggleMinimize()
             CornerRadius = UDim.new(1, 0) 
         }):Play()
     else
+        -- Saving the current minimized location before expanding
+        minimizedPosition = MainFrame.Position 
+        
         TitleBar.Size = UDim2.new(1, 0, 0, 36)
 
+        -- Tween both Size AND Position
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
             Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight),
+            Position = expandedPosition, 
             BackgroundColor3 = Color3.fromRGB(20, 20, 20)
         }):Play()
 
@@ -613,7 +628,6 @@ track(RunService.RenderStepped:Connect(function()
                     if onScreen then
                         local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                         local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                        -- Grace window of +30 pixels for the locked target
                         if dist <= (maxDist + 30) and passesWallCheck then
                             validCurrentDist = dist
                         end
@@ -647,12 +661,10 @@ track(RunService.RenderStepped:Connect(function()
 
         -- 3. Sticky Logic
         if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
-            -- Keep current target unless new target is closer by SwitchMargin
             if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
                 currentTarget = bestTarget
             end
         else
-            -- Not sticky, or lost current target
             currentTarget = bestTarget
         end
 
@@ -729,12 +741,11 @@ track(RunService.RenderStepped:Connect(function()
                         HighlightStorage[player] = highlight
                     end
                     
-                    -- Change color based on team
                     if isTeammate(player) then
-                        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green
+                        highlight.FillColor = Color3.fromRGB(0, 255, 0)
                         highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
                     else
-                        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
                         highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
                     end
                 elseif HighlightStorage[player] then
@@ -749,7 +760,6 @@ track(RunService.RenderStepped:Connect(function()
         end)
     end
 
-    -- Cleanup Highlights for players who left or died
     for player, highlight in pairs(HighlightStorage) do
         if not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 or not ProtectionSettings.ShowESP then
             highlight:Destroy()
