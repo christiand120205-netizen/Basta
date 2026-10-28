@@ -26,12 +26,13 @@ local ProtectionSettings = {
 
 local GuiOpen = false
 local HealthBarStorage = {}
+local Minimized = false
+local ExpandedHeight = 460
+local CollapsedHeight = 40
 
--- Targeting state (persists across frames)
 local currentTargetName = nil
 local lastTargetTime = 0
 
--- Every RBXScriptConnection lives here so Unload can kill them all
 local Connections = {}
 local function track(conn)
     table.insert(Connections, conn)
@@ -65,7 +66,7 @@ Instance.new("UICorner", OpenButton).CornerRadius = UDim.new(0, 8)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-MainFrame.Size = UDim2.new(0, 300, 0, 460)
+MainFrame.Size = UDim2.new(0, 300, 0, ExpandedHeight)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.Visible = false
@@ -73,7 +74,7 @@ MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -90, 0, 40)
+Title.Size = UDim2.new(1, -124, 0, 40)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "Secret Service"
@@ -89,7 +90,8 @@ local TitleBar = Instance.new("TextButton")
 TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 40)
 TitleBar.Position = UDim2.new(0, 0, 0, 0)
-TitleBar.BackgroundTransparency = 1
+TitleBar.BackgroundTransparency = 0.98
+TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 TitleBar.Text = ""
 TitleBar.AutoButtonColor = false
 TitleBar.Active = true
@@ -108,6 +110,18 @@ CloseButton.TextSize = 14
 CloseButton.ZIndex = 5
 CloseButton.Parent = MainFrame
 Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 6)
+
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Size = UDim2.new(0, 32, 0, 32)
+MinimizeButton.Position = UDim2.new(1, -74, 0, 4)
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+MinimizeButton.Text = "_"
+MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.TextSize = 14
+MinimizeButton.ZIndex = 5
+MinimizeButton.Parent = MainFrame
+Instance.new("UICorner", MinimizeButton).CornerRadius = UDim.new(0, 6)
 
 local Scroll = Instance.new("ScrollingFrame")
 Scroll.Size = UDim2.new(1, -16, 1, -50)
@@ -368,17 +382,35 @@ Stroke.Color = Color3.fromRGB(0, 170, 255)
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 ----------------------------------------------------------------
--- DRAGGABLE MENU (dual-path: TitleBar.InputChanged + UIS.InputChanged)
+-- MINIMIZE / EXPAND
+----------------------------------------------------------------
+
+track(MinimizeButton.Activated:Connect(function()
+    Minimized = not Minimized
+    if Minimized then
+        MainFrame.Size = UDim2.new(0, 300, 0, CollapsedHeight)
+        Scroll.Visible = false
+        MinimizeButton.Text = "+"
+    else
+        MainFrame.Size = UDim2.new(0, 300, 0, ExpandedHeight)
+        Scroll.Visible = true
+        MinimizeButton.Text = "_"
+    end
+end))
+
+----------------------------------------------------------------
+-- DRAGGABLE MENU (Android-safe: TouchMoved with finger lock)
 ----------------------------------------------------------------
 
 do
     local dragging = false
+    local dragTouchId = nil
     local dragStart = nil
     local startPos = nil
 
-    local function updateDrag(input)
+    local function updateDrag(pos)
         if not dragging or not dragStart then return end
-        local delta = input.Position - dragStart
+        local delta = pos - dragStart
         local newX = startPos.X.Offset + delta.X
         local newY = startPos.Y.Offset + delta.Y
         local vp = Camera.ViewportSize
@@ -388,42 +420,48 @@ do
         MainFrame.Position = UDim2.new(0.5, newX, 0.5, newY)
     end
 
-    local function beginDrag(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
+    track(TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
-            dragStart = input.Position
+            dragTouchId = input
+            dragStart = Vector2.new(input.Position.X, input.Position.Y)
+            startPos = MainFrame.Position
+        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragTouchId = nil
+            dragStart = Vector2.new(input.Position.X, input.Position.Y)
             startPos = MainFrame.Position
         end
-    end
+    end))
 
-    local function endDrag(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
+    track(UserInputService.TouchMoved:Connect(function(input)
+        if not dragging then return end
+        if dragTouchId and input ~= dragTouchId then return end
+        updateDrag(Vector2.new(input.Position.X, input.Position.Y))
+    end))
+
+    track(UserInputService.TouchEnded:Connect(function(input)
+        if dragTouchId and input == dragTouchId then
+            dragging = false
+            dragTouchId = nil
+            dragStart = nil
+            startPos = nil
+        end
+    end))
+
+    track(UserInputService.InputChanged:Connect(function(input)
+        if dragging and dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateDrag(Vector2.new(input.Position.X, input.Position.Y))
+        end
+    end))
+
+    track(UserInputService.InputEnded:Connect(function(input)
+        if dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
             dragStart = nil
             startPos = nil
         end
-    end
-
-    track(TitleBar.InputBegan:Connect(beginDrag))
-
-    track(UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            updateDrag(input)
-        end
     end))
-
-    track(TitleBar.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            updateDrag(input)
-        end
-    end))
-
-    track(UserInputService.InputEnded:Connect(endDrag))
-    track(TitleBar.InputEnded:Connect(endDrag))
 end
 
 ----------------------------------------------------------------
