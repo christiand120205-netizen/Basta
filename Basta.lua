@@ -1,11 +1,11 @@
--- Secret Service Protection (With Auto Fire)
+-- Secret Service Protection (Touch Blip Auto Fire)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser") -- Required for mouse clicks
+local VirtualUser = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -13,10 +13,10 @@ local Camera = workspace.CurrentCamera
 
 local ProtectionSettings = {
     Enabled = false,
-    FOV = 30,
+    FOV = 120,
     Smoothness = 0.15,
     HardAim = false,
-    AutoFire = false, -- NEW SETTING
+    AutoFire = false,
     TargetPart = "Head",
     WallCheck = true,
     ShowFOV = true,
@@ -34,6 +34,11 @@ local CircleSize = 52
 
 local currentTarget = nil
 local lastTargetTime = 0
+
+-- Auto Fire Blip
+local blipPos = UDim2.new(1, -120, 1, -150) -- Default bottom right area
+local isFiring = false
+local lastFireTime = 0
 
 local Connections = {}
 local function track(conn)
@@ -150,6 +155,66 @@ RightList.Padding = UDim.new(0, 4)
 RightList.Parent = RightColumn
 
 ----------------------------------------------------------------
+-- AUTO FIRE BLIP (The Red Circle)
+----------------------------------------------------------------
+
+local FireBlip = Instance.new("Frame")
+FireBlip.Name = "FireBlip"
+FireBlip.AnchorPoint = Vector2.new(0.5, 0.5)
+FireBlip.Size = UDim2.new(0, 70, 0, 70)
+FireBlip.Position = blipPos
+FireBlip.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+FireBlip.BackgroundTransparency = 0.5
+FireBlip.Visible = false
+FireBlip.Active = true
+FireBlip.ZIndex = 50
+FireBlip.Parent = ScreenGui
+
+local BlipCorner = Instance.new("UICorner", FireBlip)
+BlipCorner.CornerRadius = UDim.new(1, 0)
+
+local BlipStroke = Instance.new("UIStroke", FireBlip)
+BlipStroke.Color = Color3.fromRGB(255, 50, 50)
+BlipStroke.Thickness = 3
+
+local BlipText = Instance.new("TextLabel", FireBlip)
+BlipText.Size = UDim2.new(1, 0, 1, 0)
+BlipText.BackgroundTransparency = 1
+BlipText.Text = "FIRE"
+BlipText.TextColor3 = Color3.fromRGB(255, 255, 255)
+BlipText.Font = Enum.Font.GothamBold
+BlipText.TextSize = 12
+
+-- Drag logic for the Red Circle
+local draggingBlip = false
+local blipDragStart = nil
+local blipStartPos = nil
+
+FireBlip.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingBlip = true
+        blipDragStart = Vector2.new(input.Position.X, input.Position.Y)
+        blipStartPos = FireBlip.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if draggingBlip and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = Vector2.new(input.Position.X, input.Position.Y) - blipDragStart
+        FireBlip.Position = UDim2.new(
+            blipStartPos.X.Scale, blipStartPos.X.Offset + delta.X,
+            blipStartPos.Y.Scale, blipStartPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingBlip = false
+    end
+end)
+
+----------------------------------------------------------------
 -- UI CONTROLS
 ----------------------------------------------------------------
 
@@ -183,6 +248,11 @@ local function CreateToggle(name, default, callback, parent)
         local newState = Btn.BackgroundColor3 == Color3.fromRGB(60, 60, 60)
         Btn.BackgroundColor3 = newState and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(60, 60, 60)
         callback(newState)
+        
+        -- Show/Hide the Fire Blip
+        if name == "Auto Fire" then
+            FireBlip.Visible = newState
+        end
     end))
 end
 
@@ -399,7 +469,7 @@ CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v en
 CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end, RightColumn)
 CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end, RightColumn)
 CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end, RightColumn)
-CreateToggle("Auto Fire", false, function(v) ProtectionSettings.AutoFire = v end, RightColumn) -- ADDED BUTTON
+CreateToggle("Auto Fire", false, function(v) ProtectionSettings.AutoFire = v end, RightColumn)
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -411,7 +481,7 @@ Stroke.Color = Color3.fromRGB(0, 170, 255)
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 ----------------------------------------------------------------
--- DRAG & TAP LOGIC
+-- DRAG & TAP LOGIC (Menu)
 ----------------------------------------------------------------
 
 do
@@ -576,36 +646,6 @@ end
 CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript, RightColumn)
 
 ----------------------------------------------------------------
--- AUTO FIRE LOGIC
-----------------------------------------------------------------
-local lastFireTime = 0
-
-local function TryFire()
-    if not ProtectionSettings.Enabled or not ProtectionSettings.AutoFire or not currentTarget then return end
-    
-    -- Fire rate limit (0.1 seconds = 10 shots per second max)
-    if tick() - lastFireTime < 0.1 then return end
-    lastFireTime = tick()
-
-    local char = LocalPlayer.Character
-    if not char then return end
-
-    local tool = char:FindFirstChildOfClass("Tool")
-    if tool then
-        -- Method 1: Activate the tool (Works for most default and custom guns)
-        pcall(function()
-            tool:Activate()
-        end)
-        
-        -- Method 2: Simulate a mouse click (Works for mobile FPS games with virtual buttons)
-        pcall(function()
-            VirtualUser:Button1Down(Vector2.new(0, 0))
-            VirtualUser:Button1Up(Vector2.new(0, 0))
-        end)
-    end
-end
-
-----------------------------------------------------------------
 -- MAIN LOOP
 ----------------------------------------------------------------
 
@@ -703,9 +743,20 @@ track(RunService.RenderStepped:Connect(function()
                     end
                     InfoLabel.Text = "Target: " .. currentTarget.Name
                     
-                    -- Trigger Auto Fire
-                    if ProtectionSettings.AutoFire then
-                        TryFire()
+                    -- Trigger Auto Fire Blip
+                    if ProtectionSettings.AutoFire and tick() - lastFireTime > 0.1 then
+                        lastFireTime = tick()
+                        task.spawn(function()
+                            -- Calculate the exact screen position of the Red Blip
+                            local posX = FireBlip.AbsolutePosition.X + (FireBlip.AbsoluteSize.X / 2)
+                            local posY = FireBlip.AbsolutePosition.Y + (FireBlip.AbsoluteSize.Y / 2)
+                            local targetVector = Vector2.new(posX, posY)
+                            
+                            -- Simulate a touch at the red circle's location
+                            VirtualUser:Button1Down(targetVector)
+                            task.wait(0.05) -- Tap duration
+                            VirtualUser:Button1Up(targetVector)
+                        end)
                     end
                     
                 else
@@ -748,15 +799,3 @@ track(RunService.RenderStepped:Connect(function()
             end
         end)
     end
-end))
-
-----------------------------------------------------------------
--- CLEANUP ON LEAVE
-----------------------------------------------------------------
-
-track(Players.PlayerRemoving:Connect(function(player)
-    if HealthBarStorage[player.Name] then
-        HealthBarStorage[player.Name]:Destroy()
-        HealthBarStorage[player.Name] = nil
-    end
-end))
