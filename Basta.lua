@@ -801,4 +801,3 @@ track(Players.PlayerRemoving:Connect(function(player)
         HealthBarStorage[player.Name]:Destroy()
         HealthBarStorage[player.Name] = nil
     end
-end
