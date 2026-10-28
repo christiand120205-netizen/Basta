@@ -1,4 +1,4 @@
--- Secret Service Protection (LANDSCAPE / NO OPEN BUTTON)
+-- Secret Service Protection (LANDSCAPE / MINIMIZE TO CIRCLE)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -26,11 +26,12 @@ local ProtectionSettings = {
 local HealthBarStorage = {}
 local Minimized = false
 local ExpandedHeight = 260
-local CollapsedHeight = 36
 local FrameWidth = 480
+local CircleSize = 52
 
 local currentTargetName = nil
 local lastTargetTime = 0
+local savedFramePos = UDim2.new(0.5, 0, 0.5, 0)
 
 local Connections = {}
 local function track(conn)
@@ -101,17 +102,19 @@ TitleBar.Selectable = true
 TitleBar.ZIndex = 4
 TitleBar.Parent = MainFrame
 
-local MinimizeButton = Instance.new("TextButton")
-MinimizeButton.Size = UDim2.new(0, 28, 0, 28)
-MinimizeButton.Position = UDim2.new(1, -34, 0, 4)
-MinimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-MinimizeButton.Text = "_"
-MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinimizeButton.Font = Enum.Font.GothamBold
-MinimizeButton.TextSize = 14
-MinimizeButton.ZIndex = 5
-MinimizeButton.Parent = MainFrame
-Instance.new("UICorner", MinimizeButton).CornerRadius = UDim.new(0, 6)
+-- Round minimize button in the title bar
+local MinimizeCircleButton = Instance.new("TextButton")
+MinimizeCircleButton.Name = "MinimizeCircleButton"
+MinimizeCircleButton.Size = UDim2.new(0, 28, 0, 28)
+MinimizeCircleButton.Position = UDim2.new(1, -34, 0, 4)
+MinimizeCircleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+MinimizeCircleButton.Text = "○"
+MinimizeCircleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeCircleButton.Font = Enum.Font.GothamBold
+MinimizeCircleButton.TextSize = 16
+MinimizeCircleButton.ZIndex = 5
+MinimizeCircleButton.Parent = MainFrame
+Instance.new("UICorner", MinimizeCircleButton).CornerRadius = UDim.new(1, 0)
 
 local Columns = Instance.new("Frame")
 Columns.Name = "Columns"
@@ -147,6 +150,26 @@ RightColumn.Parent = Columns
 local RightList = Instance.new("UIListLayout")
 RightList.Padding = UDim.new(0, 4)
 RightList.Parent = RightColumn
+
+-- The circle that the menu shrinks into
+local MinimizedCircle = Instance.new("TextButton")
+MinimizedCircle.Name = "MinimizedCircle"
+MinimizedCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+MinimizedCircle.Size = UDim2.new(0, CircleSize, 0, CircleSize)
+MinimizedCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+MinimizedCircle.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+MinimizedCircle.Text = "SS"
+MinimizedCircle.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizedCircle.Font = Enum.Font.GothamBold
+MinimizedCircle.TextSize = 16
+MinimizedCircle.Active = true
+MinimizedCircle.Visible = false
+MinimizedCircle.ZIndex = 20
+MinimizedCircle.Parent = ScreenGui
+Instance.new("UICorner", MinimizedCircle).CornerRadius = UDim.new(1, 0)
+local CircleStroke = Instance.new("UIStroke", MinimizedCircle)
+CircleStroke.Color = Color3.fromRGB(255, 255, 255)
+CircleStroke.Thickness = 2
 
 ----------------------------------------------------------------
 -- MOBILE-COMPATIBLE UI CONTROLS (compact, landscape)
@@ -393,7 +416,7 @@ local function CreateHealthBar(player)
 end
 
 ----------------------------------------------------------------
--- INITIALIZE UI CONTROLS (split across two columns)
+-- INITIALIZE UI CONTROLS
 ----------------------------------------------------------------
 
 CreateToggle("Enable Protection", false, function(v) ProtectionSettings.Enabled = v end, LeftColumn)
@@ -420,24 +443,41 @@ Stroke.Color = Color3.fromRGB(0, 170, 255)
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 ----------------------------------------------------------------
--- MINIMIZE / EXPAND
+-- MINIMIZE TO CIRCLE / EXPAND
 ----------------------------------------------------------------
 
-track(MinimizeButton.Activated:Connect(function()
-    Minimized = not Minimized
+local function collapseToCircle()
+    savedFramePos = MainFrame.Position
+    MainFrame.Visible = false
+    MainFrame.Size = UDim2.new(0, 0, 0, 0)
+    MinimizedCircle.Position = savedFramePos
+    MinimizedCircle.Visible = true
+    Minimized = true
+end
+
+local function expandFromCircle()
+    savedFramePos = MinimizedCircle.Position
+    MinimizedCircle.Visible = false
+    MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
+    MainFrame.Position = savedFramePos
+    MainFrame.Visible = true
+    Minimized = false
+end
+
+track(MinimizeCircleButton.Activated:Connect(function()
+    if not Minimized then
+        collapseToCircle()
+    end
+end))
+
+track(MinimizedCircle.Activated:Connect(function()
     if Minimized then
-        MainFrame.Size = UDim2.new(0, FrameWidth, 0, CollapsedHeight)
-        Columns.Visible = false
-        MinimizeButton.Text = "+"
-    else
-        MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
-        Columns.Visible = true
-        MinimizeButton.Text = "_"
+        expandFromCircle()
     end
 end))
 
 ----------------------------------------------------------------
--- DRAGGABLE MENU (Android-safe: TouchMoved with finger lock)
+-- DRAGGABLE MENU + DRAGGABLE CIRCLE (Android-safe)
 ----------------------------------------------------------------
 
 do
@@ -445,30 +485,51 @@ do
     local dragTouchId = nil
     local dragStart = nil
     local startPos = nil
+    local dragTarget = nil
 
     local function updateDrag(pos)
-        if not dragging or not dragStart then return end
+        if not dragging or not dragStart or not dragTarget then return end
         local delta = pos - dragStart
+        local vp = Camera.ViewportSize
+        local w, h = dragTarget.AbsoluteSize.X, dragTarget.AbsoluteSize.Y
         local newX = startPos.X.Offset + delta.X
         local newY = startPos.Y.Offset + delta.Y
-        local vp = Camera.ViewportSize
-        local w, h = MainFrame.AbsoluteSize.X, MainFrame.AbsoluteSize.Y
         newX = math.clamp(newX, -(vp.X / 2) + w / 2 + 8, (vp.X / 2) - w / 2 - 8)
         newY = math.clamp(newY, -(vp.Y / 2) + h / 2 + 8, (vp.Y / 2) - h / 2 - 8)
-        MainFrame.Position = UDim2.new(0.5, newX, 0.5, newY)
+        dragTarget.Position = UDim2.new(0.5, newX, 0.5, newY)
+    end
+
+    local function beginDrag(input, target)
+        dragging = true
+        dragTarget = target
+        dragTouchId = (input.UserInputType == Enum.UserInputType.Touch) and input or nil
+        dragStart = Vector2.new(input.Position.X, input.Position.Y)
+        startPos = target.Position
+    end
+
+    local function endDrag(input)
+        if dragTouchId and input ~= dragTouchId then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            dragTouchId = nil
+            dragStart = nil
+            startPos = nil
+            dragTarget = nil
+        end
     end
 
     track(TitleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragTouchId = input
-            dragStart = Vector2.new(input.Position.X, input.Position.Y)
-            startPos = MainFrame.Position
-        elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragTouchId = nil
-            dragStart = Vector2.new(input.Position.X, input.Position.Y)
-            startPos = MainFrame.Position
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            beginDrag(input, MainFrame)
+        end
+    end))
+
+    track(MinimizedCircle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            beginDrag(input, MinimizedCircle)
         end
     end))
 
@@ -478,14 +539,7 @@ do
         updateDrag(Vector2.new(input.Position.X, input.Position.Y))
     end))
 
-    track(UserInputService.TouchEnded:Connect(function(input)
-        if dragTouchId and input == dragTouchId then
-            dragging = false
-            dragTouchId = nil
-            dragStart = nil
-            startPos = nil
-        end
-    end))
+    track(UserInputService.TouchEnded:Connect(endDrag))
 
     track(UserInputService.InputChanged:Connect(function(input)
         if dragging and dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -493,13 +547,7 @@ do
         end
     end))
 
-    track(UserInputService.InputEnded:Connect(function(input)
-        if dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-            dragStart = nil
-            startPos = nil
-        end
-    end))
+    track(UserInputService.InputEnded:Connect(endDrag))
 end
 
 ----------------------------------------------------------------
