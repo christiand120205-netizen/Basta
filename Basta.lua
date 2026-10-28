@@ -1,4 +1,4 @@
--- Secret Service Protection (Touch Blip Auto Fire)
+-- Secret Service Protection (Touch Blip Auto Fire FIXED)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -34,10 +34,6 @@ local CircleSize = 52
 
 local currentTarget = nil
 local lastTargetTime = 0
-
--- Auto Fire Blip
-local blipPos = UDim2.new(1, -120, 1, -150) -- Default bottom right area
-local isFiring = false
 local lastFireTime = 0
 
 local Connections = {}
@@ -162,7 +158,7 @@ local FireBlip = Instance.new("Frame")
 FireBlip.Name = "FireBlip"
 FireBlip.AnchorPoint = Vector2.new(0.5, 0.5)
 FireBlip.Size = UDim2.new(0, 70, 0, 70)
-FireBlip.Position = blipPos
+FireBlip.Position = UDim2.new(1, -120, 1, -150) -- Default bottom right
 FireBlip.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 FireBlip.BackgroundTransparency = 0.5
 FireBlip.Visible = false
@@ -629,6 +625,7 @@ track(MinimizeCircleButton.Activated:Connect(toggleMinimize))
 local function UnloadScript()
     ProtectionSettings.Enabled = false
     ProtectionSettings.ShowHealthBars = false
+    FireBlip.Visible = false
 
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
@@ -796,6 +793,3 @@ track(RunService.RenderStepped:Connect(function()
             elseif HealthBarStorage[player.Name] then
                 HealthBarStorage[player.Name]:Destroy()
                 HealthBarStorage[player.Name] = nil
-            end
-        end)
-    end
