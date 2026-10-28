@@ -91,9 +91,6 @@ Title.Active = false
 Title.ZIndex = 3
 Title.Parent = MainFrame
 
--- TitleBar is now the full size of the frame. 
--- When expanded, it covers the top 36px.
--- When minimized, it covers the whole circle so you can drag it.
 local TitleBar = Instance.new("TextButton")
 TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 36)
@@ -103,7 +100,7 @@ TitleBar.Text = ""
 TitleBar.AutoButtonColor = false
 TitleBar.Active = true
 TitleBar.Selectable = true
-TitleBar.ZIndex = 10 -- Highest so it catches all touches in the circle
+TitleBar.ZIndex = 10
 TitleBar.Parent = MainFrame
 
 local MinimizeCircleButton = Instance.new("TextButton")
@@ -415,7 +412,7 @@ Stroke.Color = Color3.fromRGB(0, 170, 255)
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 ----------------------------------------------------------------
--- DRAG LOGIC
+-- DRAG & TAP LOGIC
 ----------------------------------------------------------------
 
 do
@@ -423,6 +420,9 @@ do
     local dragTouchId = nil
     local dragStart = nil
     local startPos = nil
+    
+    local tapStart = 0
+    local tapPos = Vector2.zero
 
     local function updateDrag(pos)
         if not dragging or not dragStart then return end
@@ -448,11 +448,22 @@ do
             dragTouchId = input
             dragStart = Vector2.new(input.Position.X, input.Position.Y)
             startPos = MainFrame.Position
+            
+            -- Record tap info for the circle
+            if Minimized then
+                tapStart = tick()
+                tapPos = Vector2.new(input.Position.X, input.Position.Y)
+            end
         elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragTouchId = nil
             dragStart = Vector2.new(input.Position.X, input.Position.Y)
             startPos = MainFrame.Position
+            
+            if Minimized then
+                tapStart = tick()
+                tapPos = Vector2.new(input.Position.X, input.Position.Y)
+            end
         end
     end
 
@@ -460,16 +471,26 @@ do
         if dragTouchId and input == dragTouchId then
             dragging = false
             dragTouchId = nil
+            
+            -- Check if it was a tap or a drag
+            if Minimized and (tick() - tapStart) < 0.3 then
+                -- Expand when you release a quick tap
+                toggleMinimize()
+            end
+            
             dragStart = nil
             startPos = nil
         elseif not dragTouchId and input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
+            -- Check if it was a tap or a drag
+            if Minimized and (tick() - tapStart) < 0.3 then
+                toggleMinimize()
+            end
             dragStart = nil
             startPos = nil
         end
     end
 
-    -- Attach drag to the TitleBar (works when expanded AND minimized because it covers the whole frame)
     track(TitleBar.InputBegan:Connect(beginDrag))
     
     track(UserInputService.TouchMoved:Connect(function(input)
@@ -493,7 +514,7 @@ end
 -- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
 ----------------------------------------------------------------
 
-local function toggleMinimize()
+function toggleMinimize()
     Minimized = not Minimized
 
     if Minimized then
@@ -536,28 +557,6 @@ local function toggleMinimize()
 end
 
 track(MinimizeCircleButton.Activated:Connect(toggleMinimize))
-
--- Click the circle to expand (only if you didn't drag it)
-local tapStart = 0
-local tapPos = Vector2.zero
-
-track(TitleBar.InputBegan:Connect(function(input)
-    if Minimized then
-        tapStart = tick()
-        tapPos = Vector2.new(input.Position.X, input.Position.Y)
-    end
-end))
-
-track(TitleBar.InputEnded:Connect(function(input)
-    if Minimized then
-        local tapEnd = tick()
-        local tapEndPos = Vector2.new(input.Position.X, input.Position.Y)
-        -- If tap was short (<0.25s) and didn't move much (<10px), expand it
-        if (tapEnd - tapStart) < 0.25 and (tapEndPos - tapPos).Magnitude < 10 then
-            toggleMinimize()
-        end
-    end
-end))
 
 ----------------------------------------------------------------
 -- UNLOAD
