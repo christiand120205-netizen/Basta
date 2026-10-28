@@ -429,9 +429,11 @@ do
         local delta = pos - dragStart
         local vp = Camera.ViewportSize
         
-        -- Clamp based on expanded size so it doesn't get stuck halfway off-screen
-        local clampW = FrameWidth * UIScale.Scale
-        local clampH = ExpandedHeight * UIScale.Scale
+        -- THIS is the fix: Clamp based on current state (Minimized or Expanded)
+        local currentW = Minimized and CircleSize or FrameWidth
+        local currentH = Minimized and CircleSize or ExpandedHeight
+        local clampW = currentW * UIScale.Scale
+        local clampH = currentH * UIScale.Scale
 
         local newX = startPos.X.Offset + delta.X
         local newY = startPos.Y.Offset + delta.Y
@@ -449,7 +451,6 @@ do
             dragStart = Vector2.new(input.Position.X, input.Position.Y)
             startPos = MainFrame.Position
             
-            -- Record tap info for the circle
             if Minimized then
                 tapStart = tick()
                 tapPos = Vector2.new(input.Position.X, input.Position.Y)
@@ -472,9 +473,7 @@ do
             dragging = false
             dragTouchId = nil
             
-            -- Check if it was a tap or a drag
             if Minimized and (tick() - tapStart) < 0.3 then
-                -- Expand when you release a quick tap
                 toggleMinimize()
             end
             
@@ -482,7 +481,6 @@ do
             startPos = nil
         elseif not dragTouchId and input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
-            -- Check if it was a tap or a drag
             if Minimized and (tick() - tapStart) < 0.3 then
                 toggleMinimize()
             end
@@ -522,7 +520,6 @@ function toggleMinimize()
         Title.Visible = false
         MinimizeCircleButton.Visible = false
         
-        -- Make TitleBar cover the entire frame so you can drag the circle
         TitleBar.Size = UDim2.new(1, 0, 1, 0)
 
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
@@ -534,7 +531,6 @@ function toggleMinimize()
             CornerRadius = UDim.new(1, 0) 
         }):Play()
     else
-        -- Restore TitleBar to just the top bar
         TitleBar.Size = UDim2.new(1, 0, 0, 36)
 
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
