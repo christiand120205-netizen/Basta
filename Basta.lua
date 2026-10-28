@@ -1,10 +1,11 @@
--- Secret Service Protection (Stable Player-Only Revert)
+-- Secret Service Protection (With Auto Fire)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
+local VirtualUser = game:GetService("VirtualUser") -- Required for mouse clicks
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -12,9 +13,10 @@ local Camera = workspace.CurrentCamera
 
 local ProtectionSettings = {
     Enabled = false,
-    FOV = 120,
+    FOV = 30,
     Smoothness = 0.15,
     HardAim = false,
+    AutoFire = false, -- NEW SETTING
     TargetPart = "Head",
     WallCheck = true,
     ShowFOV = true,
@@ -397,6 +399,7 @@ CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v en
 CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end, RightColumn)
 CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end, RightColumn)
 CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end, RightColumn)
+CreateToggle("Auto Fire", false, function(v) ProtectionSettings.AutoFire = v end, RightColumn) -- ADDED BUTTON
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -573,6 +576,36 @@ end
 CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript, RightColumn)
 
 ----------------------------------------------------------------
+-- AUTO FIRE LOGIC
+----------------------------------------------------------------
+local lastFireTime = 0
+
+local function TryFire()
+    if not ProtectionSettings.Enabled or not ProtectionSettings.AutoFire or not currentTarget then return end
+    
+    -- Fire rate limit (0.1 seconds = 10 shots per second max)
+    if tick() - lastFireTime < 0.1 then return end
+    lastFireTime = tick()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        -- Method 1: Activate the tool (Works for most default and custom guns)
+        pcall(function()
+            tool:Activate()
+        end)
+        
+        -- Method 2: Simulate a mouse click (Works for mobile FPS games with virtual buttons)
+        pcall(function()
+            VirtualUser:Button1Down(Vector2.new(0, 0))
+            VirtualUser:Button1Up(Vector2.new(0, 0))
+        end)
+    end
+end
+
+----------------------------------------------------------------
 -- MAIN LOOP
 ----------------------------------------------------------------
 
@@ -669,6 +702,12 @@ track(RunService.RenderStepped:Connect(function()
                         Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
                     end
                     InfoLabel.Text = "Target: " .. currentTarget.Name
+                    
+                    -- Trigger Auto Fire
+                    if ProtectionSettings.AutoFire then
+                        TryFire()
+                    end
+                    
                 else
                     InfoLabel.Text = "Target: None"
                 end
