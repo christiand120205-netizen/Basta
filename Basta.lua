@@ -1,4 +1,4 @@
--- Secret Service Protection (Touch Blip Auto Fire FIXED)
+-- Secret Service Protection (Fully Verified)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -801,3 +801,4 @@ track(Players.PlayerRemoving:Connect(function(player)
         HealthBarStorage[player.Name]:Destroy()
         HealthBarStorage[player.Name] = nil
     end
+end))
