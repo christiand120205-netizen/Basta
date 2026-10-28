@@ -1,4 +1,4 @@
--- Secret Service Protection (ESP Team Colors Fixed)
+-- Secret Service Protection (IY TeamColor Chams Adopted)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -339,7 +339,6 @@ local function isVisible(part)
     return result == nil
 end
 
--- STRICTLY checks if they are on your team
 local function isTeammate(p)
     if p == LocalPlayer then return false end
     if LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team then return true end
@@ -696,7 +695,6 @@ track(RunService.RenderStepped:Connect(function()
     -- Health Bars & ESP
     for _, player in pairs(Players:GetPlayers()) do
         pcall(function()
-            -- Removed "not isTeammate" here so ESP draws on everyone
             if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
                 
                 local hum = player.Character.Humanoid
@@ -737,14 +735,21 @@ track(RunService.RenderStepped:Connect(function()
                         HighlightStorage[player] = highlight
                     end
                     
-                    -- Change color based on team
-                    if isTeammate(player) then
-                        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green
-                        highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
-                    else
-                        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red
-                        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                    -- ADOPTED FROM INFINITE YIELD:
+                    -- It uses the player's exact TeamColor from the game.
+                    -- If the game is FFA (Neutral), it falls back to Red/Green.
+                    local currentColor = player.TeamColor.Color
+                    if currentColor == Color3.fromRGB(255, 255, 255) or currentColor == Color3.fromRGB(0, 0, 0) or currentColor == Color3.fromRGB(128, 128, 128) then
+                        if isTeammate(player) then
+                            currentColor = Color3.fromRGB(0, 255, 0) -- Green fallback
+                        else
+                            currentColor = Color3.fromRGB(255, 0, 0) -- Red fallback
+                        end
                     end
+                    
+                    highlight.FillColor = currentColor
+                    highlight.OutlineColor = currentColor
+                    
                 elseif HighlightStorage[player] then
                     HighlightStorage[player]:Destroy()
                     HighlightStorage[player] = nil
