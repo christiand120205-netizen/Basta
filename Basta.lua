@@ -1,4 +1,4 @@
--- Secret Service Protection (Finalized + Custom Framework Fixes)
+-- Secret Service Protection (Mobile Optimized + Priority 202 Bind)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -13,7 +13,7 @@ local Camera = workspace.CurrentCamera
 local ProtectionSettings = {
     Enabled = false,
     FOV = 120,
-    Smoothness = 0.15,
+    Smoothness = 0.2,
     HardAim = false,
     TargetPart = "Head",
     WallCheck = true,
@@ -40,6 +40,7 @@ local minimizedPosition = UDim2.new(0.5, 0, 0.5, 0)
 local currentTarget = nil
 local lastValidTarget = nil
 local lastTargetTime = 0
+local isAimingBound = false
 
 local Connections = {}
 local function track(conn)
@@ -342,7 +343,6 @@ local function isVisible(part)
     return result == nil
 end
 
--- Game-Specific Team Logic (1 = Enemy, 2 = Ally, -1 = Neutral)
 local function isTeammate(p)
     if p == LocalPlayer then return false end
     
@@ -565,6 +565,11 @@ local function UnloadScript()
     ProtectionSettings.Enabled = false
     ProtectionSettings.ShowHealthBars = false
     ProtectionSettings.ShowESP = false
+    
+    if isAimingBound then
+        pcall(function() RunService:UnbindFromRenderStep("SecretServiceAim") end)
+        isAimingBound = false
+    end
 
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
@@ -587,10 +592,10 @@ end
 CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript, RightColumn)
 
 ----------------------------------------------------------------
--- MAIN LOOP
+-- MAIN LOOP (Priority 202 Bind for Mobile)
 ----------------------------------------------------------------
 
-track(RunService.RenderStepped:Connect(function()
+local function AimLoop(dt)
     local vpSize = Camera.ViewportSize
     local screenCenter = Vector2.new(vpSize.X / 2, vpSize.Y / 2)
 
@@ -674,11 +679,12 @@ track(RunService.RenderStepped:Connect(function()
             if targetChar then
                 local aimPart = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild(ProtectionSettings.TargetPart)
                 if aimPart then
-                    local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
+                    local targetCF = CFrame.lookAt(Camera.CFrame.Position, aimPart.Position)
                     
                     if ProtectionSettings.HardAim then
                         Camera.CFrame = targetCF
                     else
+                        -- Mobile Safe Lerp
                         Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
                     end
                     InfoLabel.Text = "Target: " .. currentTarget.Name
@@ -766,7 +772,19 @@ track(RunService.RenderStepped:Connect(function()
             HighlightStorage[player] = nil
         end
     end
-end))
+end
+
+-- Attempt to bind at Priority 202 to beat the game's custom camera (Priority 201)
+local success, err = pcall(function()
+    RunService:BindToRenderStep("SecretServiceAim", 202, AimLoop)
+    isAimingBound = true
+end)
+
+if not success then
+    -- Fallback if the executor doesn't support BindToRenderStep priority > 200
+    warn("BindToRenderStep failed on this executor. Falling back to RenderStepped. Camera may fight.")
+    track(RunService.RenderStepped:Connect(AimLoop))
+end
 
 ----------------------------------------------------------------
 -- CLEANUP ON LEAVE
