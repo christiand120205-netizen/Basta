@@ -1,4 +1,4 @@
--- Secret Service Protection (LANDSCAPE / MORPH TO CIRCLE)
+-- Secret Service Protection (AI + Player Targeting)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -16,6 +16,7 @@ local ProtectionSettings = {
     Smoothness = 0.15,
     HardAim = false,
     TargetPart = "Head",
+    TargetType = "All", -- "All", "Players Only", "Bots Only"
     WallCheck = true,
     ShowFOV = true,
     ShowHealthBars = false,
@@ -40,7 +41,7 @@ local function track(conn)
 end
 
 ----------------------------------------------------------------
--- UI CONSTRUCTION (LANDSCAPE)
+-- UI CONSTRUCTION
 ----------------------------------------------------------------
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -67,13 +68,9 @@ UIScale.Parent = MainFrame
 
 local function updateScale()
     local vp = Camera.ViewportSize
-    if vp.X < 700 then
-        UIScale.Scale = 0.85
-    elseif vp.X < 900 then
-        UIScale.Scale = 0.95
-    else
-        UIScale.Scale = 1
-    end
+    if vp.X < 700 then UIScale.Scale = 0.85
+    elseif vp.X < 900 then UIScale.Scale = 0.95
+    else UIScale.Scale = 1 end
 end
 updateScale()
 track(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale))
@@ -152,7 +149,7 @@ RightList.Padding = UDim.new(0, 4)
 RightList.Parent = RightColumn
 
 ----------------------------------------------------------------
--- MOBILE-COMPATIBLE UI CONTROLS
+-- UI CONTROLS
 ----------------------------------------------------------------
 
 local function CreateToggle(name, default, callback, parent)
@@ -358,9 +355,9 @@ local function isTeammate(p)
     return false
 end
 
-local function CreateHealthBar(player)
+local function CreateHealthBar(target)
     local billboard = Instance.new("BillboardGui")
-    billboard.Name = "ESP_Bar_" .. player.Name
+    billboard.Name = "ESP_Bar_" .. target.Name
     billboard.Size = UDim2.new(4, 0, 0.5, 0)
     billboard.StudsOffset = Vector3.new(0, 2.5, 0)
     billboard.AlwaysOnTop = true
@@ -397,6 +394,9 @@ CreateSlider("Smoothness", 0, 1, ProtectionSettings.Smoothness, function(v) Prot
 CreateToggle("Hard Aim", false, function(v) ProtectionSettings.HardAim = v end, LeftColumn)
 CreateToggle("Sticky Target", true, function(v) ProtectionSettings.StickyTarget = v end, LeftColumn)
 
+CreateCycler("Target Type", {"All", "Players Only", "Bots Only"}, 1, function(v)
+    ProtectionSettings.TargetType = v
+end, RightColumn)
 CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v end, RightColumn)
 CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end, RightColumn)
 CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end, RightColumn)
@@ -424,20 +424,17 @@ do
     local tapStart = 0
     local tapPos = Vector2.zero
 
-        local function updateDrag(pos)
+    local function updateDrag(pos)
         if not dragging or not dragStart then return end
         local delta = pos - dragStart
         local vp = Camera.ViewportSize
         
-        -- Use actual frame size instead of manual scale math for exact edge clamping
         local currentW = MainFrame.AbsoluteSize.X
         local currentH = MainFrame.AbsoluteSize.Y
 
         local newX = startPos.X.Offset + delta.X
         local newY = startPos.Y.Offset + delta.Y
         
-        -- If minimized, allow it to go flush to the edge (0 padding).
-        -- If expanded, keep 10px padding so the borders don't touch the edge.
         local pad = Minimized and 0 or 10
         
         newX = math.clamp(newX, -(vp.X / 2) + (currentW / 2) + pad, (vp.X / 2) - (currentW / 2) - pad)
@@ -598,45 +595,82 @@ track(RunService.RenderStepped:Connect(function()
     local target = nil
     if ProtectionSettings.Enabled then
         local maxDist = ProtectionSettings.FOV
-        local bestPlayer, bestDist = nil, math.huge
-        local currentPlayer, currentDist = nil, math.huge
-
+        local bestTarget, bestDist = nil, math.huge
+        local currentTarget, currentDist = nil, math.huge
+        
+        -- Create a master list of both Players and Models (NPCs/Bots)
+        local possibleTargets = {}
+        
+        -- 1. Add Players
         for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and not isTeammate(p) and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-                local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart) or p.Character:FindFirstChild("HumanoidRootPart")
+            table.insert(possibleTargets, p)
+        end
+        
+        -- 2. Add Bots (Models in Workspace with Humanoids)
+        for _, obj in pairs(Workspace:GetChildren()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
+                -- Make sure it's not a player character (which we already added)
+                if not Players:GetPlayerFromCharacter(obj) then
+                    table.insert(possibleTargets, obj)
+                end
+            end
+        end
+
+        for _, t in pairs(possibleTargets) do
+            local isPlayer = t:IsA("Player")
+            local char = isPlayer and t.Character or t
+            local isDead = false
+            
+            -- Determine if it's a valid target based on the Target Type setting
+            if ProtectionSettings.TargetType == "Players Only" and not isPlayer then
+                isDead = true
+            elseif ProtectionSettings.TargetType == "Bots Only" and isPlayer then
+                isDead = true
+            end
+
+            -- Skip teammates if it's a player
+            if isPlayer and isTeammate(t) then isDead = true end
+            
+            if not isDead and char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+                local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
                 if part then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                     if onScreen then
                         local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                         local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                        local limit = (p.Name == currentTargetName) and (maxDist + 30) or maxDist
+                        local limit = (t.Name == currentTargetName) and (maxDist + 30) or maxDist
+                        
                         if dist <= limit and passesWallCheck then
-                            if p.Name == currentTargetName then currentPlayer, currentDist = p, dist end
-                            if dist < bestDist then bestPlayer, bestDist = p, dist end
+                            if t.Name == currentTargetName then 
+                                currentTarget, currentDist = t, dist 
+                            end
+                            if dist < bestDist then 
+                                bestTarget, bestDist = t, dist 
+                            end
                         end
                     end
                 end
             end
         end
 
-        if ProtectionSettings.StickyTarget and currentPlayer then
-            target = currentPlayer
-            if bestPlayer and bestPlayer ~= currentPlayer and bestDist < currentDist - ProtectionSettings.SwitchMargin then
-                target = bestPlayer
-                currentTargetName = bestPlayer.Name
+        -- Sticky targeting logic
+        if ProtectionSettings.StickyTarget and currentTarget then
+            target = currentTarget
+            if bestTarget and bestTarget ~= currentTarget and bestDist < currentDist - ProtectionSettings.SwitchMargin then
+                target = bestTarget
+                currentTargetName = bestTarget.Name
             end
         else
-            target = bestPlayer
-            currentTargetName = bestPlayer and bestPlayer.Name or nil
+            target = bestTarget
+            currentTargetName = bestTarget and bestTarget.Name or nil
         end
 
+        -- Grace period handling
         if target then
             lastTargetTime = tick()
         elseif currentTargetName and tick() - lastTargetTime < 0.25 then
-            local p = Players:FindFirstChild(currentTargetName)
-            if p and p.Character then
-                local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart) or p.Character:FindFirstChild("HumanoidRootPart")
-                if part then target = p else currentTargetName = nil end
+            if bestTarget then
+                target = bestTarget
             else
                 currentTargetName = nil
             end
@@ -644,51 +678,61 @@ track(RunService.RenderStepped:Connect(function()
             currentTargetName = nil
         end
 
-        if target and target.Character then
-            local aimPart = target.Character:FindFirstChild(ProtectionSettings.TargetPart) or target.Character:FindFirstChild("HumanoidRootPart")
-            if aimPart then
-                local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
-                if ProtectionSettings.HardAim then
-                    Camera.CFrame = targetCF
+        -- Execution
+        if target then
+            local targetChar = target:IsA("Player") and target.Character or target
+            if targetChar then
+                local aimPart = targetChar:FindFirstChild(ProtectionSettings.TargetPart) or targetChar:FindFirstChild("HumanoidRootPart")
+                if aimPart then
+                    local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
+                    if ProtectionSettings.HardAim then
+                        Camera.CFrame = targetCF
+                    else
+                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
+                    end
+                    InfoLabel.Text = "Target: " .. target.Name
                 else
-                    Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
+                    InfoLabel.Text = "Target: None"
                 end
-                InfoLabel.Text = "Target: " .. target.Name
-            else
-                InfoLabel.Text = "Target: None"
             end
         else
             InfoLabel.Text = "Target: None"
         end
     end
 
-    for _, player in pairs(Players:GetPlayers()) do
+    -- Health Bars (also updated to handle Bots)
+    for _, obj in pairs(Workspace:GetChildren()) do
         pcall(function()
-            if player ~= LocalPlayer and not isTeammate(player) and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
-                local bar = HealthBarStorage[player.Name]
-                if not bar then
-                    bar = CreateHealthBar(player)
-                    HealthBarStorage[player.Name] = bar
-                end
-
-                local hum = player.Character.Humanoid
-                local head = player.Character.Head
-                local barFrame = bar:FindFirstChild("Bar")
-
-                if ProtectionSettings.ShowHealthBars and hum.Health > 0 and (not ProtectionSettings.WallCheck or isVisible(head)) then
-                    bar.Enabled = true
-                    bar.Adornee = head
-                    if barFrame and barFrame:FindFirstChild("Fill") then
-                        local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-                        barFrame.Fill.Size = UDim2.new(hp, 0, 1, 0)
-                        barFrame.Fill.BackgroundColor3 = Color3.fromHSV(hp * 0.3, 1, 1)
+            local isPlayer = obj:IsA("Player")
+            local char = isPlayer and obj.Character or obj
+            
+            if char and char:FindFirstChild("Head") and char:FindFirstChild("Humanoid") then
+                if (isPlayer and not isTeammate(obj)) or not isPlayer then
+                    local bar = HealthBarStorage[obj.Name]
+                    if not bar then
+                        bar = CreateHealthBar(obj)
+                        HealthBarStorage[obj.Name] = bar
                     end
-                else
-                    bar.Enabled = false
+
+                    local hum = char.Humanoid
+                    local head = char.Head
+                    local barFrame = bar:FindFirstChild("Bar")
+
+                    if ProtectionSettings.ShowHealthBars and hum.Health > 0 and (not ProtectionSettings.WallCheck or isVisible(head)) then
+                        bar.Enabled = true
+                        bar.Adornee = head
+                        if barFrame and barFrame:FindFirstChild("Fill") then
+                            local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                            barFrame.Fill.Size = UDim2.new(hp, 0, 1, 0)
+                            barFrame.Fill.BackgroundColor3 = Color3.fromHSV(hp * 0.3, 1, 1)
+                        end
+                    else
+                        bar.Enabled = false
+                    end
                 end
-            elseif HealthBarStorage[player.Name] then
-                HealthBarStorage[player.Name]:Destroy()
-                HealthBarStorage[player.Name] = nil
+            elseif HealthBarStorage[obj.Name] then
+                HealthBarStorage[obj.Name]:Destroy()
+                HealthBarStorage[obj.Name] = nil
             end
         end)
     end
