@@ -1,4 +1,4 @@
--- Secret Service Protection (MOBILE FIXED: PERMANENTLY CENTERED FOV)
+-- Secret Service Protection (LANDSCAPE / NO OPEN BUTTON)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -9,7 +9,6 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local Camera = workspace.CurrentCamera
 
--- Protection Configuration
 local ProtectionSettings = {
     Enabled = false,
     FOV = 120,
@@ -24,11 +23,11 @@ local ProtectionSettings = {
     IgnoreTeam = true,
 }
 
-local GuiOpen = false
 local HealthBarStorage = {}
 local Minimized = false
-local ExpandedHeight = 460
-local CollapsedHeight = 40
+local ExpandedHeight = 260
+local CollapsedHeight = 36
+local FrameWidth = 480
 
 local currentTargetName = nil
 local lastTargetTime = 0
@@ -40,7 +39,7 @@ local function track(conn)
 end
 
 ----------------------------------------------------------------
--- UI CONSTRUCTION
+-- UI CONSTRUCTION (LANDSCAPE)
 ----------------------------------------------------------------
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -49,32 +48,35 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = PlayerGui
 
-local OpenButton = Instance.new("TextButton")
-OpenButton.Name = "OpenButton"
-OpenButton.AnchorPoint = Vector2.new(1, 1)
-OpenButton.Size = UDim2.new(0, 110, 0, 44)
-OpenButton.Position = UDim2.new(1, -15, 1, -15)
-OpenButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-OpenButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-OpenButton.Text = "Menu"
-OpenButton.Font = Enum.Font.GothamBold
-OpenButton.TextSize = 13
-OpenButton.ZIndex = 10
-OpenButton.Parent = ScreenGui
-Instance.new("UICorner", OpenButton).CornerRadius = UDim.new(0, 8)
-
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-MainFrame.Size = UDim2.new(0, 300, 0, ExpandedHeight)
+MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.Visible = false
+MainFrame.Visible = true
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
+local UIScale = Instance.new("UIScale")
+UIScale.Scale = 1
+UIScale.Parent = MainFrame
+
+local function updateScale()
+    local vp = Camera.ViewportSize
+    if vp.X < 700 then
+        UIScale.Scale = 0.85
+    elseif vp.X < 900 then
+        UIScale.Scale = 0.95
+    else
+        UIScale.Scale = 1
+    end
+end
+updateScale()
+track(Camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale))
+
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -124, 0, 40)
+Title.Size = UDim2.new(1, -100, 0, 36)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "Secret Service"
@@ -88,7 +90,7 @@ Title.Parent = MainFrame
 
 local TitleBar = Instance.new("TextButton")
 TitleBar.Name = "TitleBar"
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.Size = UDim2.new(1, 0, 0, 36)
 TitleBar.Position = UDim2.new(0, 0, 0, 0)
 TitleBar.BackgroundTransparency = 0.98
 TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
@@ -99,21 +101,9 @@ TitleBar.Selectable = true
 TitleBar.ZIndex = 4
 TitleBar.Parent = MainFrame
 
-local CloseButton = Instance.new("TextButton")
-CloseButton.Size = UDim2.new(0, 32, 0, 32)
-CloseButton.Position = UDim2.new(1, -38, 0, 4)
-CloseButton.BackgroundColor3 = Color3.fromRGB(170, 50, 50)
-CloseButton.Text = "X"
-CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.TextSize = 14
-CloseButton.ZIndex = 5
-CloseButton.Parent = MainFrame
-Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 6)
-
 local MinimizeButton = Instance.new("TextButton")
-MinimizeButton.Size = UDim2.new(0, 32, 0, 32)
-MinimizeButton.Position = UDim2.new(1, -74, 0, 4)
+MinimizeButton.Size = UDim2.new(0, 28, 0, 28)
+MinimizeButton.Position = UDim2.new(1, -34, 0, 4)
 MinimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 MinimizeButton.Text = "_"
 MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -123,46 +113,68 @@ MinimizeButton.ZIndex = 5
 MinimizeButton.Parent = MainFrame
 Instance.new("UICorner", MinimizeButton).CornerRadius = UDim.new(0, 6)
 
-local Scroll = Instance.new("ScrollingFrame")
-Scroll.Size = UDim2.new(1, -16, 1, -50)
-Scroll.Position = UDim2.new(0, 8, 0, 45)
-Scroll.BackgroundTransparency = 1
-Scroll.BorderSizePixel = 0
-Scroll.ScrollBarThickness = 3
-Scroll.CanvasSize = UDim2.new(0, 0, 0, 720)
-Scroll.Parent = MainFrame
+local Columns = Instance.new("Frame")
+Columns.Name = "Columns"
+Columns.Size = UDim2.new(1, -16, 1, -44)
+Columns.Position = UDim2.new(0, 8, 0, 40)
+Columns.BackgroundTransparency = 1
+Columns.Parent = MainFrame
 
-local UIList = Instance.new("UIListLayout")
-UIList.Padding = UDim.new(0, 6)
-UIList.Parent = Scroll
+local LeftColumn = Instance.new("ScrollingFrame")
+LeftColumn.Name = "LeftColumn"
+LeftColumn.Size = UDim2.new(0.5, -4, 1, 0)
+LeftColumn.Position = UDim2.new(0, 0, 0, 0)
+LeftColumn.BackgroundTransparency = 1
+LeftColumn.BorderSizePixel = 0
+LeftColumn.ScrollBarThickness = 2
+LeftColumn.CanvasSize = UDim2.new(0, 0, 0, 400)
+LeftColumn.Parent = Columns
+
+local LeftList = Instance.new("UIListLayout")
+LeftList.Padding = UDim.new(0, 4)
+LeftList.Parent = LeftColumn
+
+local RightColumn = Instance.new("ScrollingFrame")
+RightColumn.Name = "RightColumn"
+RightColumn.Size = UDim2.new(0.5, -4, 1, 0)
+RightColumn.Position = UDim2.new(0.5, 4, 0, 0)
+RightColumn.BackgroundTransparency = 1
+RightColumn.BorderSizePixel = 0
+RightColumn.ScrollBarThickness = 2
+RightColumn.CanvasSize = UDim2.new(0, 0, 0, 400)
+RightColumn.Parent = Columns
+
+local RightList = Instance.new("UIListLayout")
+RightList.Padding = UDim.new(0, 4)
+RightList.Parent = RightColumn
 
 ----------------------------------------------------------------
--- MOBILE-COMPATIBLE UI CONTROLS
+-- MOBILE-COMPATIBLE UI CONTROLS (compact, landscape)
 ----------------------------------------------------------------
 
-local function CreateToggle(name, default, callback)
+local function CreateToggle(name, default, callback, parent)
     local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, -6, 0, 36)
+    Frame.Size = UDim2.new(1, -4, 0, 30)
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Frame.Parent = Scroll
+    Frame.Parent = parent
     Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
 
     local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0, 44, 0, 24)
-    Btn.Position = UDim2.new(1, -48, 0.5, -12)
+    Btn.Size = UDim2.new(0, 40, 0, 20)
+    Btn.Position = UDim2.new(1, -44, 0.5, -10)
     Btn.BackgroundColor3 = default and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(60, 60, 60)
     Btn.Text = ""
     Btn.Parent = Frame
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 12)
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 10)
 
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -55, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.Size = UDim2.new(1, -50, 1, 0)
+    Label.Position = UDim2.new(0, 8, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = name
     Label.TextColor3 = Color3.fromRGB(200, 200, 200)
     Label.Font = Enum.Font.Gotham
-    Label.TextSize = 13
+    Label.TextSize = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
 
@@ -173,29 +185,29 @@ local function CreateToggle(name, default, callback)
     end))
 end
 
-local function CreateSlider(name, min, max, default, callback)
+local function CreateSlider(name, min, max, default, callback, parent)
     local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, -6, 0, 48)
+    Frame.Size = UDim2.new(1, -4, 0, 40)
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Frame.Parent = Scroll
+    Frame.Parent = parent
     Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
 
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -10, 0, 22)
-    Label.Position = UDim2.new(0, 10, 0, 2)
+    Label.Size = UDim2.new(1, -8, 0, 18)
+    Label.Position = UDim2.new(0, 8, 0, 2)
     Label.BackgroundTransparency = 1
     Label.Text = name .. ": " .. default
     Label.TextColor3 = Color3.fromRGB(200, 200, 200)
     Label.Font = Enum.Font.Gotham
-    Label.TextSize = 13
+    Label.TextSize = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
 
     local SliderBack = Instance.new("TextButton")
     SliderBack.Text = ""
     SliderBack.AutoButtonColor = false
-    SliderBack.Size = UDim2.new(1, -20, 0, 10)
-    SliderBack.Position = UDim2.new(0, 10, 0.65, -3)
+    SliderBack.Size = UDim2.new(1, -16, 0, 8)
+    SliderBack.Position = UDim2.new(0, 8, 0.65, -2)
     SliderBack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     SliderBack.Parent = Frame
     Instance.new("UICorner", SliderBack).CornerRadius = UDim.new(1, 0)
@@ -241,52 +253,52 @@ local function CreateSlider(name, min, max, default, callback)
     end))
 end
 
-local function CreateButton(name, color, callback)
+local function CreateButton(name, color, callback, parent)
     local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, -6, 0, 36)
+    Frame.Size = UDim2.new(1, -4, 0, 30)
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Frame.Parent = Scroll
+    Frame.Parent = parent
     Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
 
     local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(1, -12, 0, 26)
-    Btn.Position = UDim2.new(0, 6, 0.5, -13)
+    Btn.Size = UDim2.new(1, -8, 0, 22)
+    Btn.Position = UDim2.new(0, 4, 0.5, -11)
     Btn.BackgroundColor3 = color
     Btn.Text = name
     Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     Btn.Font = Enum.Font.GothamBold
-    Btn.TextSize = 13
+    Btn.TextSize = 12
     Btn.Parent = Frame
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
 
     track(Btn.Activated:Connect(callback))
 end
 
-local function CreateCycler(name, options, defaultIndex, callback)
+local function CreateCycler(name, options, defaultIndex, callback, parent)
     local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, -6, 0, 36)
+    Frame.Size = UDim2.new(1, -4, 0, 30)
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Frame.Parent = Scroll
+    Frame.Parent = parent
     Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
 
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -120, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.Size = UDim2.new(1, -110, 1, 0)
+    Label.Position = UDim2.new(0, 8, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Text = name
     Label.TextColor3 = Color3.fromRGB(200, 200, 200)
     Label.Font = Enum.Font.Gotham
-    Label.TextSize = 13
+    Label.TextSize = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Parent = Frame
 
     local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0, 100, 0, 26)
-    Btn.Position = UDim2.new(1, -106, 0.5, -13)
+    Btn.Size = UDim2.new(0, 92, 0, 22)
+    Btn.Position = UDim2.new(1, -98, 0.5, -11)
     Btn.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
     Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     Btn.Font = Enum.Font.GothamBold
-    Btn.TextSize = 12
+    Btn.TextSize = 11
     Btn.Text = options[defaultIndex]
     Btn.Parent = Frame
     Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 6)
@@ -300,13 +312,13 @@ local function CreateCycler(name, options, defaultIndex, callback)
 end
 
 local InfoLabel = Instance.new("TextLabel")
-InfoLabel.Size = UDim2.new(1, -6, 0, 30)
+InfoLabel.Size = UDim2.new(1, -4, 0, 26)
 InfoLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 InfoLabel.Text = "Target: None"
 InfoLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
 InfoLabel.Font = Enum.Font.Gotham
-InfoLabel.TextSize = 13
-InfoLabel.Parent = Scroll
+InfoLabel.TextSize = 12
+InfoLabel.Parent = RightColumn
 Instance.new("UICorner", InfoLabel)
 
 ----------------------------------------------------------------
@@ -325,8 +337,33 @@ end
 
 local function isTeammate(p)
     if not ProtectionSettings.IgnoreTeam then return false end
-    if not LocalPlayer.Team or not p.Team then return false end
-    return LocalPlayer.Team == p.Team
+    if p == LocalPlayer then return false end
+
+    if LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team then
+        return true
+    end
+
+    if LocalPlayer.TeamColor and p.TeamColor
+    and LocalPlayer.TeamColor ~= Enum.TeamColor.Neutral
+    and p.TeamColor ~= Enum.TeamColor.Neutral
+    and LocalPlayer.TeamColor == p.TeamColor then
+        return true
+    end
+
+    local myAttr = LocalPlayer:GetAttribute("Team")
+    local theirAttr = p:GetAttribute("Team")
+    if myAttr ~= nil and theirAttr ~= nil and myAttr == theirAttr then
+        return true
+    end
+
+    local myVal = LocalPlayer:FindFirstChild("Team")
+    local theirVal = p:FindFirstChild("Team")
+    if myVal and theirVal and myVal:IsA("ValueBase") and theirVal:IsA("ValueBase")
+    and myVal.Value == theirVal.Value then
+        return true
+    end
+
+    return false
 end
 
 local function CreateHealthBar(player)
@@ -356,21 +393,22 @@ local function CreateHealthBar(player)
 end
 
 ----------------------------------------------------------------
--- INITIALIZE UI CONTROLS
+-- INITIALIZE UI CONTROLS (split across two columns)
 ----------------------------------------------------------------
 
-CreateToggle("Enable Protection", false, function(v) ProtectionSettings.Enabled = v end)
+CreateToggle("Enable Protection", false, function(v) ProtectionSettings.Enabled = v end, LeftColumn)
 CreateCycler("Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso", "LowerTorso"}, 1, function(v)
     ProtectionSettings.TargetPart = v
-end)
-CreateSlider("FOV Radius", 1, 600, ProtectionSettings.FOV, function(v) ProtectionSettings.FOV = v end)
-CreateSlider("Smoothness", 0, 1, ProtectionSettings.Smoothness, function(v) ProtectionSettings.Smoothness = v end)
-CreateToggle("Hard Aim", false, function(v) ProtectionSettings.HardAim = v end)
-CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v end)
-CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end)
-CreateToggle("Sticky Target", true, function(v) ProtectionSettings.StickyTarget = v end)
-CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end)
-CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end)
+end, LeftColumn)
+CreateSlider("FOV Radius", 1, 600, ProtectionSettings.FOV, function(v) ProtectionSettings.FOV = v end, LeftColumn)
+CreateSlider("Smoothness", 0, 1, ProtectionSettings.Smoothness, function(v) ProtectionSettings.Smoothness = v end, LeftColumn)
+CreateToggle("Hard Aim", false, function(v) ProtectionSettings.HardAim = v end, LeftColumn)
+CreateToggle("Sticky Target", true, function(v) ProtectionSettings.StickyTarget = v end, LeftColumn)
+
+CreateToggle("Wall Check", true, function(v) ProtectionSettings.WallCheck = v end, RightColumn)
+CreateToggle("Ignore Teammates", true, function(v) ProtectionSettings.IgnoreTeam = v end, RightColumn)
+CreateToggle("Show FOV Circle", true, function(v) ProtectionSettings.ShowFOV = v end, RightColumn)
+CreateToggle("Show Health Bars", false, function(v) ProtectionSettings.ShowHealthBars = v end, RightColumn)
 
 local FOVCircle = Instance.new("Frame")
 FOVCircle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -388,12 +426,12 @@ Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 track(MinimizeButton.Activated:Connect(function()
     Minimized = not Minimized
     if Minimized then
-        MainFrame.Size = UDim2.new(0, 300, 0, CollapsedHeight)
-        Scroll.Visible = false
+        MainFrame.Size = UDim2.new(0, FrameWidth, 0, CollapsedHeight)
+        Columns.Visible = false
         MinimizeButton.Text = "+"
     else
-        MainFrame.Size = UDim2.new(0, 300, 0, ExpandedHeight)
-        Scroll.Visible = true
+        MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
+        Columns.Visible = true
         MinimizeButton.Text = "_"
     end
 end))
@@ -485,23 +523,7 @@ local function UnloadScript()
     pcall(function() ScreenGui:Destroy() end)
 end
 
-CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript)
-
-----------------------------------------------------------------
--- MENU OPEN / CLOSE
-----------------------------------------------------------------
-
-track(OpenButton.Activated:Connect(function()
-    GuiOpen = not GuiOpen
-    MainFrame.Visible = GuiOpen
-    OpenButton.Text = GuiOpen and "Close" or "Menu"
-end))
-
-track(CloseButton.Activated:Connect(function()
-    GuiOpen = false
-    MainFrame.Visible = false
-    OpenButton.Text = "Menu"
-end))
+CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript, RightColumn)
 
 ----------------------------------------------------------------
 -- MAIN LOOP
