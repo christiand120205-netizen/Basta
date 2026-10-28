@@ -1,4 +1,4 @@
--- Secret Service Protection (Stable + Chams + Separate UI Positions)
+-- Secret Service Protection (ESP Team Colors Fixed)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -32,10 +32,8 @@ local ExpandedHeight = 260
 local FrameWidth = 480
 local CircleSize = 52
 
--- POSITION MEMORY --
 local expandedPosition = UDim2.new(0.5, 0, 0.5, 0)
 local minimizedPosition = UDim2.new(0.5, 0, 0.5, 0)
-----------------------
 
 local currentTarget = nil
 local lastTargetTime = 0
@@ -341,10 +339,9 @@ local function isVisible(part)
     return result == nil
 end
 
+-- STRICTLY checks if they are on your team
 local function isTeammate(p)
-    if not ProtectionSettings.IgnoreTeam then return false end
     if p == LocalPlayer then return false end
-
     if LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team then return true end
     if LocalPlayer.TeamColor and p.TeamColor
     and LocalPlayer.TeamColor ~= Enum.TeamColor.Neutral
@@ -512,14 +509,13 @@ do
 end
 
 ----------------------------------------------------------------
--- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE + POSITION MEMORY)
+-- MINIMIZE / EXPAND
 ----------------------------------------------------------------
 
 function toggleMinimize()
     Minimized = not Minimized
 
     if Minimized then
-        -- Saving the current expanded location before minimizing
         expandedPosition = MainFrame.Position 
         
         Columns.Visible = false
@@ -528,7 +524,6 @@ function toggleMinimize()
         
         TitleBar.Size = UDim2.new(1, 0, 1, 0)
 
-        -- Tween both Size AND Position
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
             Size = UDim2.new(0, CircleSize, 0, CircleSize),
             Position = minimizedPosition, 
@@ -539,12 +534,10 @@ function toggleMinimize()
             CornerRadius = UDim.new(1, 0) 
         }):Play()
     else
-        -- Saving the current minimized location before expanding
         minimizedPosition = MainFrame.Position 
         
         TitleBar.Size = UDim2.new(1, 0, 0, 36)
 
-        -- Tween both Size AND Position
         TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
             Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight),
             Position = expandedPosition, 
@@ -638,7 +631,8 @@ track(RunService.RenderStepped:Connect(function()
 
         -- 2. Find the best new target
         for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and not isTeammate(p) then
+            -- Aimbot respects the IgnoreTeam setting
+            if p ~= LocalPlayer and (not ProtectionSettings.IgnoreTeam or not isTeammate(p)) then
                 local char = p.Character
                 if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
                     local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
@@ -702,8 +696,12 @@ track(RunService.RenderStepped:Connect(function()
     -- Health Bars & ESP
     for _, player in pairs(Players:GetPlayers()) do
         pcall(function()
-            if player ~= LocalPlayer and not isTeammate(player) and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
+            -- Removed "not isTeammate" here so ESP draws on everyone
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
                 
+                local hum = player.Character.Humanoid
+                local head = player.Character.Head
+
                 -- Health Bars
                 local bar = HealthBarStorage[player.Name]
                 if not bar then
@@ -711,8 +709,6 @@ track(RunService.RenderStepped:Connect(function()
                     HealthBarStorage[player.Name] = bar
                 end
 
-                local hum = player.Character.Humanoid
-                local head = player.Character.Head
                 local barFrame = bar:FindFirstChild("Bar")
 
                 if ProtectionSettings.ShowHealthBars and hum.Health > 0 and (not ProtectionSettings.WallCheck or isVisible(head)) then
@@ -741,11 +737,12 @@ track(RunService.RenderStepped:Connect(function()
                         HighlightStorage[player] = highlight
                     end
                     
+                    -- Change color based on team
                     if isTeammate(player) then
-                        highlight.FillColor = Color3.fromRGB(0, 255, 0)
+                        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green
                         highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
                     else
-                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red
                         highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
                     end
                 elseif HighlightStorage[player] then
@@ -760,6 +757,7 @@ track(RunService.RenderStepped:Connect(function()
         end)
     end
 
+    -- Cleanup Highlights for players who left or died
     for player, highlight in pairs(HighlightStorage) do
         if not player.Character or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 or not ProtectionSettings.ShowESP then
             highlight:Destroy()
