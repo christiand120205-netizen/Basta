@@ -424,22 +424,24 @@ do
     local tapStart = 0
     local tapPos = Vector2.zero
 
-    local function updateDrag(pos)
+        local function updateDrag(pos)
         if not dragging or not dragStart then return end
         local delta = pos - dragStart
         local vp = Camera.ViewportSize
         
-        -- THIS is the fix: Clamp based on current state (Minimized or Expanded)
-        local currentW = Minimized and CircleSize or FrameWidth
-        local currentH = Minimized and CircleSize or ExpandedHeight
-        local clampW = currentW * UIScale.Scale
-        local clampH = currentH * UIScale.Scale
+        -- Use actual frame size instead of manual scale math for exact edge clamping
+        local currentW = MainFrame.AbsoluteSize.X
+        local currentH = MainFrame.AbsoluteSize.Y
 
         local newX = startPos.X.Offset + delta.X
         local newY = startPos.Y.Offset + delta.Y
         
-        newX = math.clamp(newX, -(vp.X / 2) + clampW / 2 + 8, (vp.X / 2) - clampW / 2 - 8)
-        newY = math.clamp(newY, -(vp.Y / 2) + clampH / 2 + 8, (vp.Y / 2) - clampH / 2 - 8)
+        -- If minimized, allow it to go flush to the edge (0 padding).
+        -- If expanded, keep 10px padding so the borders don't touch the edge.
+        local pad = Minimized and 0 or 10
+        
+        newX = math.clamp(newX, -(vp.X / 2) + (currentW / 2) + pad, (vp.X / 2) - (currentW / 2) - pad)
+        newY = math.clamp(newY, -(vp.Y / 2) + (currentH / 2) + pad, (vp.Y / 2) - (currentH / 2) - pad)
         
         MainFrame.Position = UDim2.new(0.5, newX, 0.5, newY)
     end
