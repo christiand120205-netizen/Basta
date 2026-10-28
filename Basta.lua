@@ -1,4 +1,4 @@
--- Secret Service Protection (Ultimate Stability Fix)
+-- Secret Service Protection (Restored Stable Version + Team Attribute Fix)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -13,7 +13,7 @@ local Camera = workspace.CurrentCamera
 local ProtectionSettings = {
     Enabled = false,
     FOV = 120,
-    Smoothness = 0.2,
+    Smoothness = 0.15,
     HardAim = false,
     TargetPart = "Head",
     WallCheck = true,
@@ -340,12 +340,16 @@ local function isVisible(part)
     return result == nil
 end
 
+-- GAME SPECIFIC TEAM LOGIC (1 = Enemy, 2 = Ally, -1 = Neutral)
 local function isTeammate(p)
     if p == LocalPlayer then return false end
+    
     local myTeam = LocalPlayer:GetAttribute("Team")
     local theirTeam = p:GetAttribute("Team")
+    
     if myTeam == nil or theirTeam == nil then return false end
     if myTeam == -1 or theirTeam == -1 then return false end 
+    
     return myTeam == theirTeam
 end
 
@@ -560,8 +564,6 @@ local function UnloadScript()
     ProtectionSettings.ShowHealthBars = false
     ProtectionSettings.ShowESP = false
 
-    pcall(function() RunService:UnbindFromRenderStep("SecretServiceAim") end)
-
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
     end
@@ -583,7 +585,7 @@ end
 CreateButton("Unload Script", Color3.fromRGB(170, 50, 50), UnloadScript, RightColumn)
 
 ----------------------------------------------------------------
--- TARGETING & ESP LOOP (RenderStepped)
+-- MAIN LOOP
 ----------------------------------------------------------------
 
 track(RunService.RenderStepped:Connect(function()
@@ -599,13 +601,30 @@ track(RunService.RenderStepped:Connect(function()
     end
 
     if ProtectionSettings.Enabled then
-        pcall(function()
-            local maxDist = ProtectionSettings.FOV
-            local bestTarget, bestDist = nil, math.huge
-            local validCurrentDist = math.huge
-            
-            if currentTarget then
-                local char = currentTarget.Character
+        local maxDist = ProtectionSettings.FOV
+        local bestTarget, bestDist = nil, math.huge
+        local validCurrentDist = math.huge
+        
+        if currentTarget then
+            local char = currentTarget.Character
+            if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+                local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
+                if part then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                        local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
+                        if dist <= (maxDist + 30) and passesWallCheck then
+                            validCurrentDist = dist
+                        end
+                    end
+                end
+            end
+        end
+
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and (not ProtectionSettings.IgnoreTeam or not isTeammate(p)) then
+                local char = p.Character
                 if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
                     local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
                     if part then
@@ -613,60 +632,62 @@ track(RunService.RenderStepped:Connect(function()
                         if onScreen then
                             local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                             local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                            if dist <= (maxDist + 30) and passesWallCheck then
-                                validCurrentDist = dist
-                            end
-                        end
-                    end
-                end
-            end
-
-            for _, p in pairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and (not ProtectionSettings.IgnoreTeam or not isTeammate(p)) then
-                    local char = p.Character
-                    if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-                        local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
-                        if part then
-                            local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                            if onScreen then
-                                local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-                                local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                                
-                                if dist <= maxDist and passesWallCheck then
-                                    if dist < bestDist then 
-                                        bestTarget, bestDist = p, dist 
-                                    end
+                            
+                            if dist <= maxDist and passesWallCheck then
+                                if dist < bestDist then 
+                                    bestTarget, bestDist = p, dist 
                                 end
                             end
                         end
                     end
                 end
             end
+        end
 
-            if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
-                if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
-                    currentTarget = bestTarget
-                end
-            else
+        if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
+            if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
                 currentTarget = bestTarget
             end
+        else
+            currentTarget = bestTarget
+        end
 
-            if currentTarget then
-                lastTargetTime = tick()
-                lastValidTarget = currentTarget
-            elseif lastValidTarget and tick() - lastTargetTime < 0.25 then
-                currentTarget = lastValidTarget
-            else
-                currentTarget = nil
-                lastValidTarget = nil
+        if currentTarget then
+            lastTargetTime = tick()
+            lastValidTarget = currentTarget
+        elseif lastValidTarget and tick() - lastTargetTime < 0.25 then
+            currentTarget = lastValidTarget
+        else
+            currentTarget = nil
+            lastValidTarget = nil
+        end
+
+        if currentTarget then
+            local targetChar = currentTarget.Character
+            if targetChar then
+                local aimPart = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild(ProtectionSettings.TargetPart)
+                if aimPart then
+                    local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
+                    if ProtectionSettings.HardAim then
+                        Camera.CFrame = targetCF
+                    else
+                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
+                    end
+                    InfoLabel.Text = "Target: " .. currentTarget.Name
+                else
+                    InfoLabel.Text = "Target: None"
+                end
             end
-        end)
+        else
+            InfoLabel.Text = "Target: None"
+        end
     end
 
-    -- ESP
+    -- Health Bars & ESP
     for _, player in pairs(Players:GetPlayers()) do
         pcall(function()
             if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
+                
                 local hum = player.Character.Humanoid
                 local head = player.Character.Head
 
@@ -675,6 +696,7 @@ track(RunService.RenderStepped:Connect(function()
                     bar = CreateHealthBar(player)
                     HealthBarStorage[player.Name] = bar
                 end
+
                 local barFrame = bar:FindFirstChild("Bar")
 
                 if ProtectionSettings.ShowHealthBars and hum.Health > 0 and (not ProtectionSettings.WallCheck or isVisible(head)) then
@@ -704,13 +726,13 @@ track(RunService.RenderStepped:Connect(function()
                     
                     local theirTeam = player:GetAttribute("Team")
                     if isTeammate(player) then
-                        highlight.FillColor = Color3.fromRGB(0, 255, 0)
+                        highlight.FillColor = Color3.fromRGB(0, 255, 0) -- Green
                         highlight.OutlineColor = Color3.fromRGB(0, 255, 0)
                     elseif theirTeam == 1 then
-                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0) -- Red
                         highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
                     else
-                        highlight.FillColor = Color3.fromRGB(255, 255, 0)
+                        highlight.FillColor = Color3.fromRGB(255, 255, 0) -- Yellow
                         highlight.OutlineColor = Color3.fromRGB(255, 255, 0)
                     end
                 elseif HighlightStorage[player] then
@@ -732,34 +754,6 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 end))
-
-----------------------------------------------------------------
--- CAMERA AIM LOOP (Priority 202 for Custom Camera)
-----------------------------------------------------------------
-
-pcall(function()
-    RunService:BindToRenderStep("SecretServiceAim", 202, function()
-        if ProtectionSettings.Enabled and currentTarget then
-            local targetChar = currentTarget.Character
-            if targetChar then
-                local aimPart = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("HumanoidRootPart") or targetChar:FindFirstChild(ProtectionSettings.TargetPart)
-                if aimPart then
-                    -- CFrame.new is safer than CFrame.lookAt (won't error on zero vectors)
-                    local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
-                    
-                    if ProtectionSettings.HardAim then
-                        Camera.CFrame = targetCF
-                    else
-                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
-                    end
-                    InfoLabel.Text = "Target: " .. currentTarget.Name
-                else
-                    InfoLabel.Text = "Target: None"
-                end
-            end
-        end
-    end)
-end)
 
 ----------------------------------------------------------------
 -- CLEANUP ON LEAVE
