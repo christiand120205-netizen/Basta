@@ -158,7 +158,7 @@ local FireBlip = Instance.new("Frame")
 FireBlip.Name = "FireBlip"
 FireBlip.AnchorPoint = Vector2.new(0.5, 0.5)
 FireBlip.Size = UDim2.new(0, 70, 0, 70)
-FireBlip.Position = UDim2.new(1, -120, 1, -150) -- Default bottom right
+FireBlip.Position = UDim2.new(1, -120, 1, -150)
 FireBlip.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 FireBlip.BackgroundTransparency = 0.5
 FireBlip.Visible = false
@@ -245,7 +245,6 @@ local function CreateToggle(name, default, callback, parent)
         Btn.BackgroundColor3 = newState and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(60, 60, 60)
         callback(newState)
         
-        -- Show/Hide the Fire Blip
         if name == "Auto Fire" then
             FireBlip.Visible = newState
         end
@@ -258,8 +257,7 @@ local function CreateSlider(name, min, max, default, callback, parent)
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     Frame.Parent = parent
     Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
-
-    local Label = Instance.new("TextLabel")
+        local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, -8, 0, 18)
     Label.Position = UDim2.new(0, 8, 0, 2)
     Label.BackgroundTransparency = 1
@@ -571,7 +569,6 @@ do
 
     track(UserInputService.InputEnded:Connect(endDrag))
 end
-
 ----------------------------------------------------------------
 -- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
 ----------------------------------------------------------------
@@ -674,7 +671,6 @@ track(RunService.RenderStepped:Connect(function()
                     if onScreen then
                         local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                         local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                        -- Grace window of +30 pixels for the locked target
                         if dist <= (maxDist + 30) and passesWallCheck then
                             validCurrentDist = dist
                         end
@@ -708,12 +704,10 @@ track(RunService.RenderStepped:Connect(function()
 
         -- 3. Sticky Logic
         if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
-            -- Keep current target unless new target is closer by SwitchMargin
             if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
                 currentTarget = bestTarget
             end
         else
-            -- Not sticky, or lost current target
             currentTarget = bestTarget
         end
 
@@ -744,14 +738,12 @@ track(RunService.RenderStepped:Connect(function()
                     if ProtectionSettings.AutoFire and tick() - lastFireTime > 0.1 then
                         lastFireTime = tick()
                         task.spawn(function()
-                            -- Calculate the exact screen position of the Red Blip
                             local posX = FireBlip.AbsolutePosition.X + (FireBlip.AbsoluteSize.X / 2)
                             local posY = FireBlip.AbsolutePosition.Y + (FireBlip.AbsoluteSize.Y / 2)
                             local targetVector = Vector2.new(posX, posY)
                             
-                            -- Simulate a touch at the red circle's location
                             VirtualUser:Button1Down(targetVector)
-                            task.wait(0.05) -- Tap duration
+                            task.wait(0.05)
                             VirtualUser:Button1Up(targetVector)
                         end)
                     end
@@ -793,3 +785,18 @@ track(RunService.RenderStepped:Connect(function()
             elseif HealthBarStorage[player.Name] then
                 HealthBarStorage[player.Name]:Destroy()
                 HealthBarStorage[player.Name] = nil
+            end
+        end)
+    end
+end))
+
+----------------------------------------------------------------
+-- CLEANUP ON LEAVE
+----------------------------------------------------------------
+
+track(Players.PlayerRemoving:Connect(function(player)
+    if HealthBarStorage[player.Name] then
+        HealthBarStorage[player.Name]:Destroy()
+        HealthBarStorage[player.Name] = nil
+    end
+end))
