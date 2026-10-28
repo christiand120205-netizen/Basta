@@ -1,4 +1,4 @@
--- Secret Service Protection (Aimbot & ESP Fixed)
+-- Secret Service Protection (IY TeamColor Chams Adopted + Aimbot Fixed)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -32,8 +32,10 @@ local ExpandedHeight = 260
 local FrameWidth = 480
 local CircleSize = 52
 
+-- POSITION MEMORY --
 local expandedPosition = UDim2.new(0.5, 0, 0.5, 0)
 local minimizedPosition = UDim2.new(0.5, 0, 0.5, 0)
+----------------------
 
 local currentTarget = nil
 local lastValidTarget = nil
@@ -519,7 +521,7 @@ do
 end
 
 ----------------------------------------------------------------
--- MINIMIZE / EXPAND
+-- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE + POSITION MEMORY)
 ----------------------------------------------------------------
 
 function toggleMinimize()
@@ -662,21 +664,17 @@ track(RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- 3. Sticky Logic (Fixed)
-        local foundTarget = false
+        -- 3. Sticky Logic
         if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
-            foundTarget = true
-        else
-            if bestTarget then
+            if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
                 currentTarget = bestTarget
-                foundTarget = true
-            else
-                currentTarget = nil
             end
+        else
+            currentTarget = bestTarget
         end
 
-        -- 4. Grace Period (Fixed)
-        if foundTarget then
+        -- 4. Grace Period
+        if currentTarget then
             lastTargetTime = tick()
             lastValidTarget = currentTarget
         elseif lastValidTarget and tick() - lastTargetTime < 0.25 then
@@ -754,7 +752,7 @@ track(RunService.RenderStepped:Connect(function()
                     local currentColor = player.TeamColor.Color
                     local neutralColor = BrickColor.new("Medium stone grey").Color
                     
-                    -- If the game is FFA (Neutral), fallback to Red/Green
+                    -- If FFA, fallback to Red/Green logic
                     if currentColor == neutralColor or not player.Team then
                         if isTeammate(player) then
                             currentColor = Color3.fromRGB(0, 255, 0) -- Green
