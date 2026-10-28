@@ -1,4 +1,4 @@
--- Secret Service Protection (Reverted to Player-Only Stable Version)
+-- Secret Service Protection (Stable Player-Only Revert)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
