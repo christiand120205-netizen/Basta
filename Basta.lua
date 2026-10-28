@@ -1,4 +1,4 @@
--- Secret Service Protection (AI + Player Targeting)
+-- Secret Service Protection (AI + Player Targeting - FIXED)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -598,7 +598,7 @@ track(RunService.RenderStepped:Connect(function()
         local bestTarget, bestDist = nil, math.huge
         local currentTarget, currentDist = nil, math.huge
         
-        -- Master list of targets (Players + Bots)
+        -- Gather all valid targets (Players + Bots)
         local possibleTargets = {}
         
         -- 1. Add Players
@@ -606,7 +606,7 @@ track(RunService.RenderStepped:Connect(function()
             table.insert(possibleTargets, p)
         end
         
-        -- 2. Add Bots (Models with Humanoids that aren't Players)
+        -- 2. Add Bots (Models in workspace with humanoids that aren't players)
         for _, obj in pairs(Workspace:GetChildren()) do
             if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
                 if not Players:GetPlayerFromCharacter(obj) then
@@ -615,18 +615,18 @@ track(RunService.RenderStepped:Connect(function()
             end
         end
 
+        -- Loop through all targets and find the best one
         for _, t in pairs(possibleTargets) do
             local isPlayer = t:IsA("Player")
             local char = isPlayer and t.Character or t
-            local isDead = false
+            local isSkip = false
             
             -- Target Type filtering
-            if ProtectionSettings.TargetType == "Players Only" and not isPlayer then isDead = true end
-            if ProtectionSettings.TargetType == "Bots Only" and isPlayer then isDead = true end
-
-            if isPlayer and isTeammate(t) then isDead = true end
+            if ProtectionSettings.TargetType == "Players Only" and not isPlayer then isSkip = true end
+            if ProtectionSettings.TargetType == "Bots Only" and isPlayer then isSkip = true end
+            if isPlayer and isTeammate(t) then isSkip = true end
             
-            if not isDead and char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            if not isSkip and char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
                 local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
                 if part then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
@@ -636,17 +636,24 @@ track(RunService.RenderStepped:Connect(function()
                         local limit = (t.Name == currentTargetName) and (maxDist + 30) or maxDist
                         
                         if dist <= limit and passesWallCheck then
-                            if t.Name == currentTargetName then currentTarget, currentDist = t, dist end
-                            if dist < bestDist then bestTarget, bestDist = t, dist end
+                            -- Check if this is the current locked target
+                            if t.Name == currentTargetName then 
+                                currentTarget, currentDist = t, dist 
+                            end
+                            -- Check if this is the closest target overall
+                            if dist < bestDist then 
+                                bestTarget, bestDist = t, dist 
+                            end
                         end
                     end
                 end
             end
         end
 
-        -- Sticky logic
+        -- Sticky targeting logic
         if ProtectionSettings.StickyTarget and currentTarget then
             target = currentTarget
+            -- Only switch if the new target is significantly closer
             if bestTarget and bestTarget ~= currentTarget and bestDist < currentDist - ProtectionSettings.SwitchMargin then
                 target = bestTarget
                 currentTargetName = bestTarget.Name
@@ -656,11 +663,15 @@ track(RunService.RenderStepped:Connect(function()
             currentTargetName = bestTarget and bestTarget.Name or nil
         end
 
-        -- Grace period
+        -- Grace period handling (prevents dropping lock randomly)
         if target then
             lastTargetTime = tick()
         elseif currentTargetName and tick() - lastTargetTime < 0.25 then
-            if bestTarget then target = bestTarget else currentTargetName = nil end
+            if bestTarget then 
+                target = bestTarget 
+            else
+                currentTargetName = nil
+            end
         else
             currentTargetName = nil
         end
