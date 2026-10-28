@@ -1,4 +1,4 @@
--- Secret Service Protection (Smart Hitbox Targeting)
+-- Secret Service Protection (CameraSubject Fix for Custom Games)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -33,6 +33,7 @@ local CircleSize = 52
 
 local currentTarget = nil
 local lastTargetTime = 0
+local originalSubject = nil
 
 local Connections = {}
 local function track(conn)
@@ -43,28 +44,23 @@ end
 ----------------------------------------------------------------
 -- SMART HITBOX FINDER
 ----------------------------------------------------------------
--- Finds the best part to aim at for custom bots.
 local function GetAimPart(char)
     if not char then return nil end
     
-    -- 1. Try the part selected in the UI
     local requested = char:FindFirstChild(ProtectionSettings.TargetPart)
     if requested then return requested end
 
-    -- 2. If the requested part isn't found, look for common body parts
     local fallbacks = {"Head", "UpperTorso", "Torso", "Chest", "Hitbox", "HumanoidRootPart"}
     for _, name in ipairs(fallbacks) do
         local part = char:FindFirstChild(name)
         if part then return part end
     end
 
-    -- 3. If it's a custom bot with a different rig, grab the highest/largest visible part
     local bestPart = nil
     local highestY = -math.huge
     
     for _, v in pairs(char:GetChildren()) do
         if v:IsA("BasePart") and v.Transparency < 1 then
-            -- Prioritize parts higher up (like the head/chest) so we don't aim at the feet
             if v.Position.Y > highestY then
                 highestY = v.Position.Y
                 bestPart = v
@@ -416,11 +412,21 @@ local function CreateHealthBar(target)
     return billboard
 end
 
+local function ResetCamera()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Camera.CameraSubject = LocalPlayer.Character.Humanoid
+    end
+    currentTarget = nil
+end
+
 ----------------------------------------------------------------
 -- INITIALIZE UI CONTROLS
 ----------------------------------------------------------------
 
-CreateToggle("Enable Protection", false, function(v) ProtectionSettings.Enabled = v end, LeftColumn)
+CreateToggle("Enable Protection", false, function(v) 
+    ProtectionSettings.Enabled = v 
+    if not v then ResetCamera() end
+end, LeftColumn)
 CreateCycler("Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "Torso", "LowerTorso"}, 1, function(v)
     ProtectionSettings.TargetPart = v
 end, LeftColumn)
@@ -595,6 +601,7 @@ track(MinimizeCircleButton.Activated:Connect(toggleMinimize))
 local function UnloadScript()
     ProtectionSettings.Enabled = false
     ProtectionSettings.ShowHealthBars = false
+    ResetCamera()
 
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
@@ -692,12 +699,10 @@ track(RunService.RenderStepped:Connect(function()
 
         -- 3. Sticky Logic
         if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
-            -- Keep current target unless new target is closer by SwitchMargin
             if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
                 currentTarget = bestTarget
             end
         else
-            -- Not sticky, or lost current target
             currentTarget = bestTarget
         end
 
@@ -710,25 +715,34 @@ track(RunService.RenderStepped:Connect(function()
             currentTarget = nil
         end
 
-        -- 5. Aim execution
+        -- 5. Aim execution (Now using CameraSubject)
         if currentTarget then
             local targetChar = currentTarget:IsA("Player") and currentTarget.Character or currentTarget
-            if targetChar then
-                local aimPart = GetAimPart(targetChar)
-                if aimPart then
-                    local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
-                    if ProtectionSettings.HardAim then
-                        Camera.CFrame = targetCF
-                    else
-                        Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
-                    end
-                    InfoLabel.Text = "Target: " .. currentTarget.Name
-                else
-                    InfoLabel.Text = "Target: None"
+            if targetChar and targetChar:FindFirstChild("Humanoid") then
+                
+                -- This tells the game "Hey, my camera belongs to that bot now"
+                Camera.CameraSubject = targetChar.Humanoid
+                
+                -- Save original camera subject just in case
+                if not originalSubject and LocalPlayer.Character then
+                    originalSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
                 end
+
+                InfoLabel.Text = "Target: " .. currentTarget.Name
+            else
+                InfoLabel.Text = "Target: None"
             end
         else
+            -- If no target, restore our own camera
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                Camera.CameraSubject = LocalPlayer.Character.Humanoid
+            end
             InfoLabel.Text = "Target: None"
+        end
+    else
+        -- Ensure camera is ours if script is disabled
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            Camera.CameraSubject = LocalPlayer.Character.Humanoid
         end
     end
 
