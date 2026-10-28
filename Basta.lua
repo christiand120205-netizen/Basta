@@ -1,4 +1,4 @@
--- Secret Service Protection (AI + Player Targeting - FULLY FIXED)
+-- Secret Service Protection (Smart Hitbox Targeting)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -38,6 +38,41 @@ local Connections = {}
 local function track(conn)
     table.insert(Connections, conn)
     return conn
+end
+
+----------------------------------------------------------------
+-- SMART HITBOX FINDER
+----------------------------------------------------------------
+-- Finds the best part to aim at for custom bots.
+local function GetAimPart(char)
+    if not char then return nil end
+    
+    -- 1. Try the part selected in the UI
+    local requested = char:FindFirstChild(ProtectionSettings.TargetPart)
+    if requested then return requested end
+
+    -- 2. If the requested part isn't found, look for common body parts
+    local fallbacks = {"Head", "UpperTorso", "Torso", "Chest", "Hitbox", "HumanoidRootPart"}
+    for _, name in ipairs(fallbacks) do
+        local part = char:FindFirstChild(name)
+        if part then return part end
+    end
+
+    -- 3. If it's a custom bot with a different rig, grab the highest/largest visible part
+    local bestPart = nil
+    local highestY = -math.huge
+    
+    for _, v in pairs(char:GetChildren()) do
+        if v:IsA("BasePart") and v.Transparency < 1 then
+            -- Prioritize parts higher up (like the head/chest) so we don't aim at the feet
+            if v.Position.Y > highestY then
+                highestY = v.Position.Y
+                bestPart = v
+            end
+        end
+    end
+
+    return bestPart
 end
 
 ----------------------------------------------------------------
@@ -603,7 +638,7 @@ track(RunService.RenderStepped:Connect(function()
             local char = isPlayer and currentTarget.Character or currentTarget
             
             if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-                local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
+                local part = GetAimPart(char)
                 if part and part.Position.Y > -50 then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                     if onScreen then
@@ -637,7 +672,7 @@ track(RunService.RenderStepped:Connect(function()
             if isPlayer and isTeammate(t) then isSkip = true end
             
             if not isSkip and char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-                local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
+                local part = GetAimPart(char)
                 
                 if part and part.Position.Y > -50 then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
@@ -679,7 +714,7 @@ track(RunService.RenderStepped:Connect(function()
         if currentTarget then
             local targetChar = currentTarget:IsA("Player") and currentTarget.Character or currentTarget
             if targetChar then
-                local aimPart = targetChar:FindFirstChild(ProtectionSettings.TargetPart) or targetChar:FindFirstChild("HumanoidRootPart")
+                local aimPart = GetAimPart(targetChar)
                 if aimPart then
                     local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
                     if ProtectionSettings.HardAim then
