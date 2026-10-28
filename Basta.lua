@@ -257,7 +257,8 @@ local function CreateSlider(name, min, max, default, callback, parent)
     Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     Frame.Parent = parent
     Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
-        local Label = Instance.new("TextLabel")
+
+    local Label = Instance.new("TextLabel")
     Label.Size = UDim2.new(1, -8, 0, 18)
     Label.Position = UDim2.new(0, 8, 0, 2)
     Label.BackgroundTransparency = 1
@@ -569,6 +570,7 @@ do
 
     track(UserInputService.InputEnded:Connect(endDrag))
 end
+
 ----------------------------------------------------------------
 -- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
 ----------------------------------------------------------------
@@ -789,10 +791,6 @@ track(RunService.RenderStepped:Connect(function()
         end)
     end
 end))
-            end
-        end)
-    end
-end))
 
 ----------------------------------------------------------------
 -- CLEANUP ON LEAVE
@@ -803,4 +801,4 @@ track(Players.PlayerRemoving:Connect(function(player)
         HealthBarStorage[player.Name]:Destroy()
         HealthBarStorage[player.Name] = nil
     end
-end))
+end
