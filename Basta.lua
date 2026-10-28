@@ -55,7 +55,7 @@ MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 MainFrame.Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight)
 MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.ClipsDescendants = true -- Hides controls when turning into a circle
+MainFrame.ClipsDescendants = true
 MainFrame.Visible = true
 MainFrame.Parent = ScreenGui
 local MainCorner = Instance.new("UICorner", MainFrame)
@@ -91,20 +91,21 @@ Title.Active = false
 Title.ZIndex = 3
 Title.Parent = MainFrame
 
+-- TitleBar is now the full size of the frame. 
+-- When expanded, it covers the top 36px.
+-- When minimized, it covers the whole circle so you can drag it.
 local TitleBar = Instance.new("TextButton")
 TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 36)
 TitleBar.Position = UDim2.new(0, 0, 0, 0)
-TitleBar.BackgroundTransparency = 0.98
-TitleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+TitleBar.BackgroundTransparency = 1
 TitleBar.Text = ""
 TitleBar.AutoButtonColor = false
 TitleBar.Active = true
 TitleBar.Selectable = true
-TitleBar.ZIndex = 4
+TitleBar.ZIndex = 10 -- Highest so it catches all touches in the circle
 TitleBar.Parent = MainFrame
 
--- Round minimize button in the title bar
 local MinimizeCircleButton = Instance.new("TextButton")
 MinimizeCircleButton.Name = "MinimizeCircleButton"
 MinimizeCircleButton.Size = UDim2.new(0, 28, 0, 28)
@@ -114,7 +115,7 @@ MinimizeCircleButton.Text = "○"
 MinimizeCircleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 MinimizeCircleButton.Font = Enum.Font.GothamBold
 MinimizeCircleButton.TextSize = 16
-MinimizeCircleButton.ZIndex = 5
+MinimizeCircleButton.ZIndex = 11
 MinimizeCircleButton.Parent = MainFrame
 Instance.new("UICorner", MinimizeCircleButton).CornerRadius = UDim.new(1, 0)
 
@@ -344,29 +345,18 @@ local function isTeammate(p)
     if not ProtectionSettings.IgnoreTeam then return false end
     if p == LocalPlayer then return false end
 
-    if LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team then
-        return true
-    end
-
+    if LocalPlayer.Team and p.Team and LocalPlayer.Team == p.Team then return true end
     if LocalPlayer.TeamColor and p.TeamColor
     and LocalPlayer.TeamColor ~= Enum.TeamColor.Neutral
     and p.TeamColor ~= Enum.TeamColor.Neutral
-    and LocalPlayer.TeamColor == p.TeamColor then
-        return true
-    end
+    and LocalPlayer.TeamColor == p.TeamColor then return true end
 
-    local myAttr = LocalPlayer:GetAttribute("Team")
-    local theirAttr = p:GetAttribute("Team")
-    if myAttr ~= nil and theirAttr ~= nil and myAttr == theirAttr then
-        return true
-    end
+    local myAttr, theirAttr = LocalPlayer:GetAttribute("Team"), p:GetAttribute("Team")
+    if myAttr ~= nil and theirAttr ~= nil and myAttr == theirAttr then return true end
 
-    local myVal = LocalPlayer:FindFirstChild("Team")
-    local theirVal = p:FindFirstChild("Team")
+    local myVal, theirVal = LocalPlayer:FindFirstChild("Team"), p:FindFirstChild("Team")
     if myVal and theirVal and myVal:IsA("ValueBase") and theirVal:IsA("ValueBase")
-    and myVal.Value == theirVal.Value then
-        return true
-    end
+    and myVal.Value == theirVal.Value then return true end
 
     return false
 end
@@ -425,78 +415,7 @@ Stroke.Color = Color3.fromRGB(0, 170, 255)
 Instance.new("UICorner", FOVCircle).CornerRadius = UDim.new(1, 0)
 
 ----------------------------------------------------------------
--- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
-----------------------------------------------------------------
-
-local function toggleMinimize()
-    Minimized = not Minimized
-
-    if Minimized then
-        -- Hide controls instantly so they don't squish
-        Columns.Visible = false
-        Title.Visible = false
-        MinimizeCircleButton.Visible = false
-        TitleBar.Visible = false
-
-        -- Tween the frame into a circle
-        local tween = TweenService:Create(
-            MainFrame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-            { 
-                Size = UDim2.new(0, CircleSize, 0, CircleSize),
-                BackgroundColor3 = Color3.fromRGB(0, 170, 255) -- Turn blue like the old circle
-            }
-        )
-        tween:Play()
-
-        -- Make it fully round
-        local tweenCorner = TweenService:Create(
-            MainCorner,
-            TweenInfo.new(0.3),
-            { CornerRadius = UDim.new(1, 0) }
-        )
-        tweenCorner:Play()
-    else
-        -- Tween back to rectangle
-        local tween = TweenService:Create(
-            MainFrame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-            { 
-                Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight),
-                BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-            }
-        )
-        tween:Play()
-
-        local tweenCorner = TweenService:Create(
-            MainCorner,
-            TweenInfo.new(0.3),
-            { CornerRadius = UDim.new(0, 10) }
-        )
-        tweenCorner:Play()
-
-        -- Show controls when it's done expanding
-        task.delay(0.3, function()
-            if not Minimized then
-                Columns.Visible = true
-                Title.Visible = true
-                MinimizeCircleButton.Visible = true
-                TitleBar.Visible = true
-            end
-        end)
-    end
-end
-
-track(MinimizeCircleButton.Activated:Connect(toggleMinimize))
--- Clicking the circle while minimized expands it
-track(MainFrame.InputBegan:Connect(function(input)
-    if Minimized and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) then
-        toggleMinimize()
-    end
-end))
-
-----------------------------------------------------------------
--- DRAGGABLE MENU (Android-safe)
+-- DRAG LOGIC
 ----------------------------------------------------------------
 
 do
@@ -509,9 +428,8 @@ do
         if not dragging or not dragStart then return end
         local delta = pos - dragStart
         local vp = Camera.ViewportSize
-        local w, h = MainFrame.AbsoluteSize.X, MainFrame.AbsoluteSize.Y
         
-        -- Use the expanded height for clamping so the circle doesn't snap weirdly if dragged
+        -- Clamp based on expanded size so it doesn't get stuck halfway off-screen
         local clampW = FrameWidth * UIScale.Scale
         local clampH = ExpandedHeight * UIScale.Scale
 
@@ -520,10 +438,11 @@ do
         
         newX = math.clamp(newX, -(vp.X / 2) + clampW / 2 + 8, (vp.X / 2) - clampW / 2 - 8)
         newY = math.clamp(newY, -(vp.Y / 2) + clampH / 2 + 8, (vp.Y / 2) - clampH / 2 - 8)
+        
         MainFrame.Position = UDim2.new(0.5, newX, 0.5, newY)
     end
 
-    track(TitleBar.InputBegan:Connect(function(input)
+    local function beginDrag(input)
         if input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragTouchId = input
@@ -535,22 +454,31 @@ do
             dragStart = Vector2.new(input.Position.X, input.Position.Y)
             startPos = MainFrame.Position
         end
-    end))
+    end
 
+    local function endDrag(input)
+        if dragTouchId and input == dragTouchId then
+            dragging = false
+            dragTouchId = nil
+            dragStart = nil
+            startPos = nil
+        elseif not dragTouchId and input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            dragStart = nil
+            startPos = nil
+        end
+    end
+
+    -- Attach drag to the TitleBar (works when expanded AND minimized because it covers the whole frame)
+    track(TitleBar.InputBegan:Connect(beginDrag))
+    
     track(UserInputService.TouchMoved:Connect(function(input)
         if not dragging then return end
         if dragTouchId and input ~= dragTouchId then return end
         updateDrag(Vector2.new(input.Position.X, input.Position.Y))
     end))
 
-    track(UserInputService.TouchEnded:Connect(function(input)
-        if dragTouchId and input == dragTouchId then
-            dragging = false
-            dragTouchId = nil
-            dragStart = nil
-            startPos = nil
-        end
-    end))
+    track(UserInputService.TouchEnded:Connect(endDrag))
 
     track(UserInputService.InputChanged:Connect(function(input)
         if dragging and dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -558,14 +486,78 @@ do
         end
     end))
 
-    track(UserInputService.InputEnded:Connect(function(input)
-        if dragTouchId == nil and input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-            dragStart = nil
-            startPos = nil
-        end
-    end))
+    track(UserInputService.InputEnded:Connect(endDrag))
 end
+
+----------------------------------------------------------------
+-- MINIMIZE / EXPAND (MORPH FRAME INTO CIRCLE)
+----------------------------------------------------------------
+
+local function toggleMinimize()
+    Minimized = not Minimized
+
+    if Minimized then
+        Columns.Visible = false
+        Title.Visible = false
+        MinimizeCircleButton.Visible = false
+        
+        -- Make TitleBar cover the entire frame so you can drag the circle
+        TitleBar.Size = UDim2.new(1, 0, 1, 0)
+
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
+            Size = UDim2.new(0, CircleSize, 0, CircleSize),
+            BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+        }):Play()
+
+        TweenService:Create(MainCorner, TweenInfo.new(0.3), { 
+            CornerRadius = UDim.new(1, 0) 
+        }):Play()
+    else
+        -- Restore TitleBar to just the top bar
+        TitleBar.Size = UDim2.new(1, 0, 0, 36)
+
+        TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { 
+            Size = UDim2.new(0, FrameWidth, 0, ExpandedHeight),
+            BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        }):Play()
+
+        TweenService:Create(MainCorner, TweenInfo.new(0.3), { 
+            CornerRadius = UDim.new(0, 10) 
+        }):Play()
+
+        task.delay(0.3, function()
+            if not Minimized then
+                Columns.Visible = true
+                Title.Visible = true
+                MinimizeCircleButton.Visible = true
+            end
+        end)
+    end
+end
+
+track(MinimizeCircleButton.Activated:Connect(toggleMinimize))
+
+-- Click the circle to expand (only if you didn't drag it)
+local tapStart = 0
+local tapPos = Vector2.zero
+
+track(TitleBar.InputBegan:Connect(function(input)
+    if Minimized then
+        tapStart = tick()
+        tapPos = Vector2.new(input.Position.X, input.Position.Y)
+    end
+end))
+
+track(TitleBar.InputEnded:Connect(function(input)
+    if Minimized then
+        local tapEnd = tick()
+        local tapEndPos = Vector2.new(input.Position.X, input.Position.Y)
+        -- If tap was short (<0.25s) and didn't move much (<10px), expand it
+        if (tapEnd - tapStart) < 0.25 and (tapEndPos - tapPos).Magnitude < 10 then
+            toggleMinimize()
+        end
+    end
+end))
 
 ----------------------------------------------------------------
 -- UNLOAD
@@ -613,13 +605,8 @@ track(RunService.RenderStepped:Connect(function()
         local currentPlayer, currentDist = nil, math.huge
 
         for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer
-            and not isTeammate(p)
-            and p.Character
-            and p.Character:FindFirstChild("Humanoid")
-            and p.Character.Humanoid.Health > 0 then
-                local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart)
-                    or p.Character:FindFirstChild("HumanoidRootPart")
+            if p ~= LocalPlayer and not isTeammate(p) and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart) or p.Character:FindFirstChild("HumanoidRootPart")
                 if part then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                     if onScreen then
@@ -627,12 +614,8 @@ track(RunService.RenderStepped:Connect(function()
                         local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
                         local limit = (p.Name == currentTargetName) and (maxDist + 30) or maxDist
                         if dist <= limit and passesWallCheck then
-                            if p.Name == currentTargetName then
-                                currentPlayer, currentDist = p, dist
-                            end
-                            if dist < bestDist then
-                                bestPlayer, bestDist = p, dist
-                            end
+                            if p.Name == currentTargetName then currentPlayer, currentDist = p, dist end
+                            if dist < bestDist then bestPlayer, bestDist = p, dist end
                         end
                     end
                 end
@@ -655,13 +638,8 @@ track(RunService.RenderStepped:Connect(function()
         elseif currentTargetName and tick() - lastTargetTime < 0.25 then
             local p = Players:FindFirstChild(currentTargetName)
             if p and p.Character then
-                local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart)
-                    or p.Character:FindFirstChild("HumanoidRootPart")
-                if part then
-                    target = p
-                else
-                    currentTargetName = nil
-                end
+                local part = p.Character:FindFirstChild(ProtectionSettings.TargetPart) or p.Character:FindFirstChild("HumanoidRootPart")
+                if part then target = p else currentTargetName = nil end
             else
                 currentTargetName = nil
             end
@@ -670,8 +648,7 @@ track(RunService.RenderStepped:Connect(function()
         end
 
         if target and target.Character then
-            local aimPart = target.Character:FindFirstChild(ProtectionSettings.TargetPart)
-                or target.Character:FindFirstChild("HumanoidRootPart")
+            local aimPart = target.Character:FindFirstChild(ProtectionSettings.TargetPart) or target.Character:FindFirstChild("HumanoidRootPart")
             if aimPart then
                 local targetCF = CFrame.new(Camera.CFrame.Position, aimPart.Position)
                 if ProtectionSettings.HardAim then
@@ -690,11 +667,7 @@ track(RunService.RenderStepped:Connect(function()
 
     for _, player in pairs(Players:GetPlayers()) do
         pcall(function()
-            if player ~= LocalPlayer
-            and not isTeammate(player)
-            and player.Character
-            and player.Character:FindFirstChild("Head")
-            and player.Character:FindFirstChild("Humanoid") then
+            if player ~= LocalPlayer and not isTeammate(player) and player.Character and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") then
                 local bar = HealthBarStorage[player.Name]
                 if not bar then
                     bar = CreateHealthBar(player)
