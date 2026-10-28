@@ -1,4 +1,4 @@
--- Secret Service Protection (AI + Player Targeting - FIXED)
+-- Secret Service Protection (AI + Player Targeting - FULLY FIXED)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -21,7 +21,7 @@ local ProtectionSettings = {
     ShowFOV = true,
     ShowHealthBars = false,
     StickyTarget = true,
-    SwitchMargin = 25,
+    SwitchMargin = 30,
     IgnoreTeam = true,
 }
 
@@ -31,7 +31,7 @@ local ExpandedHeight = 260
 local FrameWidth = 480
 local CircleSize = 52
 
-local currentTargetName = nil
+local currentTarget = nil
 local lastTargetTime = 0
 
 local Connections = {}
@@ -592,55 +592,60 @@ track(RunService.RenderStepped:Connect(function()
         FOVCircle.Visible = false
     end
 
-    local target = nil
     if ProtectionSettings.Enabled then
         local maxDist = ProtectionSettings.FOV
         local bestTarget, bestDist = nil, math.huge
-        local currentTarget, currentDist = nil, math.huge
+        local validCurrentDist = math.huge
         
-        -- Gather all valid targets (Players + Bots)
-        local possibleTargets = {}
-        
-        -- 1. Add Players
-        for _, p in pairs(Players:GetPlayers()) do
-            table.insert(possibleTargets, p)
-        end
-        
-        -- 2. Add Bots (Models in workspace with humanoids that aren't players)
-        for _, obj in pairs(Workspace:GetChildren()) do
-            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
-                if not Players:GetPlayerFromCharacter(obj) then
-                    table.insert(possibleTargets, obj)
+        -- 1. Check if our current target is still valid
+        if currentTarget then
+            local isPlayer = currentTarget:IsA("Player")
+            local char = isPlayer and currentTarget.Character or currentTarget
+            
+            if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+                local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
+                if part and part.Position.Y > -50 then
+                    local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                    if onScreen then
+                        local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                        local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
+                        -- Grace window of +30 pixels for the locked target
+                        if dist <= (maxDist + 30) and passesWallCheck then
+                            validCurrentDist = dist
+                        end
+                    end
                 end
             end
         end
 
-        -- Loop through all targets and find the best one
+        -- 2. Find the best new target
+        local possibleTargets = {}
+        for _, p in pairs(Players:GetPlayers()) do table.insert(possibleTargets, p) end
+        for _, obj in pairs(Workspace:GetChildren()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and not Players:GetPlayerFromCharacter(obj) then
+                table.insert(possibleTargets, obj)
+            end
+        end
+
         for _, t in pairs(possibleTargets) do
             local isPlayer = t:IsA("Player")
             local char = isPlayer and t.Character or t
             local isSkip = false
             
-            -- Target Type filtering
             if ProtectionSettings.TargetType == "Players Only" and not isPlayer then isSkip = true end
             if ProtectionSettings.TargetType == "Bots Only" and isPlayer then isSkip = true end
             if isPlayer and isTeammate(t) then isSkip = true end
             
             if not isSkip and char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
                 local part = char:FindFirstChild(ProtectionSettings.TargetPart) or char:FindFirstChild("HumanoidRootPart")
-                if part then
+                
+                if part and part.Position.Y > -50 then
                     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                     if onScreen then
                         local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
                         local passesWallCheck = not ProtectionSettings.WallCheck or isVisible(part)
-                        local limit = (t.Name == currentTargetName) and (maxDist + 30) or maxDist
                         
-                        if dist <= limit and passesWallCheck then
-                            -- Check if this is the current locked target
-                            if t.Name == currentTargetName then 
-                                currentTarget, currentDist = t, dist 
-                            end
-                            -- Check if this is the closest target overall
+                        if dist <= maxDist and passesWallCheck then
                             if dist < bestDist then 
                                 bestTarget, bestDist = t, dist 
                             end
@@ -650,35 +655,29 @@ track(RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Sticky targeting logic
-        if ProtectionSettings.StickyTarget and currentTarget then
-            target = currentTarget
-            -- Only switch if the new target is significantly closer
-            if bestTarget and bestTarget ~= currentTarget and bestDist < currentDist - ProtectionSettings.SwitchMargin then
-                target = bestTarget
-                currentTargetName = bestTarget.Name
+        -- 3. Sticky Logic
+        if ProtectionSettings.StickyTarget and currentTarget and validCurrentDist < math.huge then
+            -- Keep current target unless new target is closer by SwitchMargin
+            if bestTarget and bestTarget ~= currentTarget and bestDist < (validCurrentDist - ProtectionSettings.SwitchMargin) then
+                currentTarget = bestTarget
             end
         else
-            target = bestTarget
-            currentTargetName = bestTarget and bestTarget.Name or nil
+            -- Not sticky, or lost current target
+            currentTarget = bestTarget
         end
 
-        -- Grace period handling (prevents dropping lock randomly)
-        if target then
+        -- 4. Grace period
+        if currentTarget then
             lastTargetTime = tick()
-        elseif currentTargetName and tick() - lastTargetTime < 0.25 then
-            if bestTarget then 
-                target = bestTarget 
-            else
-                currentTargetName = nil
-            end
+        elseif currentTarget and tick() - lastTargetTime < 0.25 then
+            -- keep target briefly
         else
-            currentTargetName = nil
+            currentTarget = nil
         end
 
-        -- Aim execution
-        if target then
-            local targetChar = target:IsA("Player") and target.Character or target
+        -- 5. Aim execution
+        if currentTarget then
+            local targetChar = currentTarget:IsA("Player") and currentTarget.Character or currentTarget
             if targetChar then
                 local aimPart = targetChar:FindFirstChild(ProtectionSettings.TargetPart) or targetChar:FindFirstChild("HumanoidRootPart")
                 if aimPart then
@@ -688,7 +687,7 @@ track(RunService.RenderStepped:Connect(function()
                     else
                         Camera.CFrame = Camera.CFrame:Lerp(targetCF, ProtectionSettings.Smoothness)
                     end
-                    InfoLabel.Text = "Target: " .. target.Name
+                    InfoLabel.Text = "Target: " .. currentTarget.Name
                 else
                     InfoLabel.Text = "Target: None"
                 end
